@@ -24,7 +24,7 @@ Baseline 0.1 does **not** establish quality thresholds.
 
 SiteOne `--ci` mode is deliberately disabled so its built-in default gates do not become LDW policy accidentally. Lighthouse and SiteOne findings/scores are retained as scanner evidence. Actual tool/install/integrity/runtime/parsing failures may fail the workflow, but a scanner score or finding does not fail the evidence-establishing scan merely for crossing an invented threshold.
 
-Pull requests validate the harness without scanning the production website. After merge, manual dispatch or the conservative weekly schedule can run the public-site evidence collection.
+Pull requests validate the harness without scanning the production website. After merge, only manual dispatch is enabled for the one authorized controlled public-site evidence collection run.
 
 ## Intended scope
 
