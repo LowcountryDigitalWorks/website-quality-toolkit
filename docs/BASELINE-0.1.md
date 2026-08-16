@@ -42,7 +42,7 @@ The first controlled production-site run must be classified afterward as actiona
 - Release asset: `siteone-crawler-v2.5.1-linux-x64.tar.gz`
 - Pinned SHA-256: `09278d958d4a087fa46093805cd33b085b96618001dd31d45c448ad724c9024e`
 
-`download-siteone.sh` downloads only that HTTPS release asset, validates the SHA-256 before extraction or execution, installs the verified binary into the ignored local tools directory, and checks that the executable reports version `2.5.1`.
+`download-siteone.sh` downloads only that versioned HTTPS release asset, validates its upstream-published SHA-256 before extraction or execution, installs the verified binary into the ignored local tools directory, and performs a bounded `--help` executable smoke check. The immutable release asset path plus verified digest establishes the exact artifact identity.
 
 ### Lighthouse
 
