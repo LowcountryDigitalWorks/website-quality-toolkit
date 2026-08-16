@@ -40,7 +40,7 @@ jobs:
           node --check scripts/write-summary.mjs
           npm test
 
-      - name: Verify SiteOne release artifact and executable
+      - name: Verify SiteOne release artifact
         run: bash scripts/download-siteone.sh
 
   scan:
