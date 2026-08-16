@@ -16,7 +16,7 @@ The baseline composes maintained tools instead of implementing crawler/scanner l
 
 - **SiteOne Crawler** for whole-site crawl, links, SEO, headers/security-quality, accessibility-oriented, and performance-oriented evidence;
 - **Lighthouse CLI** for focused homepage lab evidence;
-- **GitHub Actions** for pull-request validation, manual/scheduled execution, job summaries, and temporary artifact retention;
+- **GitHub Actions** for pull-request validation, manual execution, job summaries, and temporary artifact retention;
 - **LDW normalizer** for a small versioned JSON representation of source evidence.
 
 Browser regression and detailed accessibility checks remain project-local. For `lowcountrydigitalworks.com`, Playwright plus `@axe-core/playwright` remain owned by that website repository and are intentionally not duplicated here.
@@ -104,13 +104,12 @@ Workflow permissions are:
 
 `contents: read`
 
-The workflow has three triggers:
+The workflow has two triggers:
 
 - pull request: validation only; **no production website scan**;
-- manual `workflow_dispatch`: validation followed by one scan;
-- weekly schedule: Monday at `12:17 UTC`, validation followed by one scan.
+- manual `workflow_dispatch`: validation followed by the authorized controlled scan.
 
-The scan job uploads `artifacts/` for 30 days using the first-party upload-artifact action. This is temporary Actions artifact retention, not a persistent database or hosted report service.
+No recurring production scan schedule is enabled for Baseline 0.1. The scan job uploads `artifacts/` for 30 days using the first-party upload-artifact action. This is temporary Actions artifact retention, not a persistent database or hosted report service.
 
 ## Network, privacy, and telemetry boundary
 
