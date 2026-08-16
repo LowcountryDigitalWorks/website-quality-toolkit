@@ -2,15 +2,11 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-TARGET="${WQT_TARGET:-https://lowcountrydigitalworks.com}"
-EXPECTED_TARGET="https://lowcountrydigitalworks.com"
+SITE_IDENTIFIER="${WQT_SITE_ID:-}"
+TARGET="$(bash "${ROOT_DIR}/scripts/resolve-target.sh" "$SITE_IDENTIFIER")"
 OUTPUT="${1:-${ROOT_DIR}/artifacts/raw/lighthouse.json}"
 LIGHTHOUSE_BIN="${ROOT_DIR}/node_modules/.bin/lighthouse"
 
-if [[ "$TARGET" != "$EXPECTED_TARGET" ]]; then
-  echo "Baseline 0.1 is authorized only for ${EXPECTED_TARGET}; got ${TARGET}" >&2
-  exit 2
-fi
 if [[ ! -x "$LIGHTHOUSE_BIN" ]]; then
   echo "Lighthouse CLI not installed at ${LIGHTHOUSE_BIN}" >&2
   exit 1
