@@ -1,9 +1,7 @@
 name: Bootstrap Baseline 0.1 lockfile
 
 on:
-  push:
-    branches:
-      - agent/baseline-0.1
+  pull_request:
     paths:
       - package.json
       - .nvmrc
