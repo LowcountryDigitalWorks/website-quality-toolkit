@@ -17,7 +17,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: website-quality-${{ github.event_name }}-${{ inputs.site || 'validation' }}
+  group: website-quality-${{ github.event_name }}
   cancel-in-progress: true
 
 jobs:
@@ -96,7 +96,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: website-quality-${{ inputs.site }}-${{ github.run_id }}
+          name: website-quality-${{ github.run_id }}
           path: artifacts/
           if-no-files-found: warn
           retention-days: 30

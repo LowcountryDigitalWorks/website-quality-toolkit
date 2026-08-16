@@ -39,7 +39,7 @@ The workflow keeps two triggers:
 
 There is **no recurring schedule**.
 
-The artifact name safely includes the selected allowlisted site identifier and GitHub run ID. Evidence remains temporary GitHub Actions artifact data with 30-day retention.
+The artifact name is site-neutral and includes only the GitHub run ID. Evidence remains temporary GitHub Actions artifact data with 30-day retention.
 
 Workflow permissions remain:
 
