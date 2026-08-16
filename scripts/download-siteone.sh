@@ -26,9 +26,9 @@ if [[ -z "$source_binary" ]]; then
 fi
 
 install -m 0755 "$source_binary" "${DEST_DIR}/siteone-crawler"
+test -x "${DEST_DIR}/siteone-crawler"
 
-# The immutable release URL plus upstream-published digest establishes the exact
-# artifact identity. Execute only after verification, using --help as a bounded
-# smoke check that does not crawl a target.
-"${DEST_DIR}/siteone-crawler" --help >/dev/null
-printf 'Verified SiteOne Crawler %s (%s)\n' "$SITEONE_VERSION" "$EXPECTED_SHA256"
+# The immutable versioned release URL plus upstream-published digest establishes
+# exact artifact identity. PR validation stops here: no crawler execution and no
+# production-site request occurs until an authorized scan job runs.
+printf 'Verified SiteOne Crawler artifact %s (%s)\n' "$SITEONE_VERSION" "$EXPECTED_SHA256"
