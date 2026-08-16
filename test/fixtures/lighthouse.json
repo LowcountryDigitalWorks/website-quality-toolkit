@@ -1,0 +1,15 @@
+{
+  "lighthouseVersion": "13.4.1",
+  "fetchTime": "2026-08-16T00:00:00.000Z",
+  "requestedUrl": "https://example.test/",
+  "finalUrl": "https://example.test/",
+  "userAgent": "fixture",
+  "categories": {
+    "performance": {"title":"Performance","score":0.92},
+    "seo": {"title":"SEO","score":1}
+  },
+  "audits": {
+    "document-title": {"title":"Document has a title","score":1,"scoreDisplayMode":"binary"},
+    "first-contentful-paint": {"title":"First Contentful Paint","score":0.9,"scoreDisplayMode":"numeric","displayValue":"1.2 s","numericValue":1200,"numericUnit":"millisecond"}
+  }
+}

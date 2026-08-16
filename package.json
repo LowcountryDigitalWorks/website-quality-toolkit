@@ -1,0 +1,17 @@
+{
+  "name": "@lowcountrydigitalworks/website-quality-toolkit",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24.18.1 <25"
+  },
+  "scripts": {
+    "test": "node --test",
+    "normalize": "node scripts/normalize.mjs",
+    "summary": "node scripts/write-summary.mjs"
+  },
+  "devDependencies": {
+    "lighthouse": "13.4.1"
+  }
+}
