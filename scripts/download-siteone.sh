@@ -26,10 +26,9 @@ if [[ -z "$source_binary" ]]; then
 fi
 
 install -m 0755 "$source_binary" "${DEST_DIR}/siteone-crawler"
-version_output="$("${DEST_DIR}/siteone-crawler" --version 2>&1)"
-if [[ "$version_output" != *"${SITEONE_VERSION}"* ]]; then
-  echo "Verified binary reported an unexpected version: ${version_output}" >&2
-  exit 1
-fi
 
-printf '%s\n' "$version_output"
+# The immutable release URL plus upstream-published digest establishes the exact
+# artifact identity. Execute only after verification, using --help as a bounded
+# smoke check that does not crawl a target.
+"${DEST_DIR}/siteone-crawler" --help >/dev/null
+printf 'Verified SiteOne Crawler %s (%s)\n' "$SITEONE_VERSION" "$EXPECTED_SHA256"
