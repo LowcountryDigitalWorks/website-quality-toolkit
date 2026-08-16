@@ -1,0 +1,21 @@
+{
+  "crawler": {
+    "command": "siteone-crawler --url=https://example.test --output=json",
+    "executedAt": "2026-08-16 00:00:00",
+    "name": "SiteOne Crawler",
+    "version": "2.5.1"
+  },
+  "qualityScores": {
+    "categories": [
+      {"code":"seo","name":"SEO","score":9.5,"label":"Excellent"},
+      {"code":"security","name":"Security","score":8,"label":"Good"}
+    ],
+    "overall": {"score":8.7}
+  },
+  "summary": {
+    "items": [
+      {"aplCode":"robots-txt-example.test","status":"NOTICE","text":"Loaded robots.txt"},
+      {"aplCode":"404","status":"WARNING","text":"One missing page"}
+    ]
+  }
+}
