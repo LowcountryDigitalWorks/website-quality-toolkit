@@ -72,6 +72,8 @@ Baseline 0.2 also does not add paid SaaS, persistent infrastructure, a database/
 
 With Node `24.18.1`:
 
+On WSL/Linux, use Linux-native Node `24.18.1` and npm. Confirm `node` and `npm` resolve to Linux paths rather than `/mnt/c/...` Windows interoperability paths. This avoids installing or executing Windows-platform dependencies from the Linux workspace.
+
 ```bash
 npm ci --ignore-scripts --no-audit --no-fund
 npm test
