@@ -1,17 +1,16 @@
-name: Website Quality Baseline 0.2
+name: Website Quality Baseline 0.3
 
 on:
   pull_request:
   workflow_dispatch:
     inputs:
       site:
-        description: Authorized site identifier
+        description: >-
+          Authorized site identifier. Validated fail-closed against
+          config/targets.json at run time; this is an opaque ID, not a URL,
+          and an unregistered/disabled value stops the run before any scan.
         required: true
-        default: lowcountrydigitalworks
-        type: choice
-        options:
-          - lowcountrydigitalworks
-          - donovanfamilydentistry
+        type: string
 
 permissions:
   contents: read
@@ -44,6 +43,7 @@ jobs:
           bash -n scripts/*.sh
           node --check scripts/normalize.mjs
           node --check scripts/write-summary.mjs
+          node --check scripts/resolve-target.mjs
           npm test
 
       - name: Verify SiteOne release artifact
@@ -84,6 +84,7 @@ jobs:
         run: |
           TARGET="$(bash scripts/resolve-target.sh "$WQT_SITE_ID")"
           node scripts/normalize.mjs \
+            --site-id "$WQT_SITE_ID" \
             --target "$TARGET" \
             --siteone artifacts/raw/siteone.json \
             --lighthouse artifacts/raw/lighthouse.json \

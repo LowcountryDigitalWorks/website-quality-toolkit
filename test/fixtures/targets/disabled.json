@@ -1,0 +1,7 @@
+{
+  "schemaVersion": "ldw.wqt-target-registry.v1",
+  "sites": [
+    { "id": "example-one", "origin": "https://example-one.test", "environment": "production", "enabled": true },
+    { "id": "example-retired", "origin": "https://example-retired.test", "environment": "production", "enabled": false }
+  ]
+}

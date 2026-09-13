@@ -4,33 +4,35 @@
 
 This repository is service-enabling infrastructure, not an authorized standalone SaaS product or a claim that every intended capability is implemented.
 
-## Baseline 0.2
+## Baseline 0.3
 
-The current authorized implementation is **Baseline 0.2 — Controlled Second-Site Validation**.
+The current authorized implementation is **Baseline 0.3 — Controlled Target Registry**.
 
-It keeps the accepted Baseline 0.1 evidence architecture and adds only a fail-closed two-site execution allowlist:
+It keeps the accepted Baseline 0.1/0.2 evidence architecture and the same two authorized sites, and moves the fail-closed execution allowlist into a single reviewable registry file, `config/targets.json`:
 
 - `lowcountrydigitalworks` → `https://lowcountrydigitalworks.com`
 - `donovanfamilydentistry` → `https://donovanfamilydentistry.com`
 
-There is no free-form URL input and no generic public scanner route. Both production scanner wrappers resolve the selected site identifier through the shared `scripts/resolve-target.sh` allowlist before scanner execution.
+There is no free-form URL input and no generic public scanner route. Both production scanner wrappers resolve the selected site identifier through the shared `scripts/resolve-target.sh` entry point, which is now backed by the registry, before scanner execution. The `workflow_dispatch` `site` input is a plain, **required, opaque string with no default** (validated fail-closed against the registry at run time), not a static dropdown that requires a workflow-YAML edit to add or remove an authorized site, and not a value that can be silently omitted into a production scan.
+
+**Baseline 0.3 may contain only the two targets already publicly disclosed in Baseline 0.2.** No third or new client/target may be added until the WQT/SEO workstream separately resolves target-registry confidentiality and raw/normalized scan-evidence confidentiality/storage — see [`docs/BASELINE-0.3.md`](docs/BASELINE-0.3.md#public-client-and-evidence-governance-gate). Future additions are **not** merely ordinary public pull requests until that gate is resolved.
 
 The current architecture remains intentionally narrow:
 
 - SiteOne Crawler `2.5.1` for whole-site evidence;
 - Lighthouse `13.4.1` for focused homepage lab evidence;
 - GitHub Actions for pull-request validation, explicit manual execution, summaries, and temporary artifacts;
-- a thin versioned `ldw.website-quality.v1` JSON normalizer that preserves source evidence without implementing scanner logic.
+- a thin versioned `ldw.website-quality.v1` JSON normalizer (now including `schemaMinorVersion` and `siteId`) that preserves source evidence without implementing scanner logic.
 
-Baseline 0.2 details are documented in [`docs/BASELINE-0.2.md`](docs/BASELINE-0.2.md). The accepted Baseline 0.1 design remains preserved as historical documentation in [`docs/BASELINE-0.1.md`](docs/BASELINE-0.1.md).
+Baseline 0.3 details are documented in [`docs/BASELINE-0.3.md`](docs/BASELINE-0.3.md). The accepted Baseline 0.1 and 0.2 designs remain preserved as historical documentation in [`docs/BASELINE-0.1.md`](docs/BASELINE-0.1.md) and [`docs/BASELINE-0.2.md`](docs/BASELINE-0.2.md).
 
 ### Evidence-first behavior
 
-Baseline 0.2 does **not** establish quality thresholds.
+Baseline 0.3 does **not** establish quality thresholds.
 
 SiteOne `--ci` mode remains deliberately disabled so its built-in default gates do not become LDW policy accidentally. Lighthouse and SiteOne findings/scores are retained as scanner evidence. Actual tool/install/integrity/runtime/parsing failures may fail the workflow, but a scanner score or finding does not fail an evidence collection run merely for crossing an invented threshold.
 
-Pull requests validate the harness and target allowlist without scanning either production website. Production evidence collection remains `workflow_dispatch` only; no recurring schedule is configured.
+Pull requests validate the harness and target registry without scanning either production website. Production evidence collection remains `workflow_dispatch` only; no recurring schedule is configured.
 
 ## Intended scope
 
@@ -66,7 +68,7 @@ This repository does **not** own:
 
 Organization-wide GitHub workflow orchestration and common repository-security automation belong in [`LowcountryDigitalWorks/.github`](https://github.com/LowcountryDigitalWorks/.github).
 
-Baseline 0.2 also does not add paid SaaS, persistent infrastructure, a database/dashboard, customer credentials/data, PHI, Google/Bing/Cloudflare provider APIs, Activepieces, Pa11y, Linkinator, OWASP ZAP, active DAST, OCR, AI/LLM analysis, automatic issue creation, multi-tenancy, tenant/customer configuration, generic URL scanning, or customer-facing product functionality.
+Baseline 0.3 also does not add paid SaaS, persistent infrastructure, a database/dashboard, customer credentials/data, PHI, Google/Bing/Cloudflare provider APIs, Activepieces, SuiteDash, Pa11y, Linkinator, OWASP ZAP, active DAST, OCR, AI/LLM analysis, automatic issue creation, multi-tenancy, tenant/customer configuration, generic URL scanning, or customer-facing product functionality.
 
 ## Local validation
 
@@ -78,6 +80,7 @@ On WSL/Linux, use Linux-native Node `24.18.1` and npm. Confirm `node` and `npm` 
 npm ci --ignore-scripts --no-audit --no-fund
 npm test
 bash -n scripts/*.sh
+node --check scripts/resolve-target.mjs
 node --check scripts/normalize.mjs
 node --check scripts/write-summary.mjs
 ```
@@ -88,13 +91,13 @@ To verify the pinned SiteOne release artifact without scanning a site:
 bash scripts/download-siteone.sh
 ```
 
-Target resolution can be checked without network access:
+Target resolution can be checked without network access. It is registry-backed by [`config/targets.json`](config/targets.json):
 
 ```bash
 bash scripts/resolve-target.sh lowcountrydigitalworks
 bash scripts/resolve-target.sh donovanfamilydentistry
 ```
 
-Any blank, malformed, URL-shaped, unknown, or future identifier is rejected. Production scanner wrappers require an authorized `WQT_SITE_ID`; they do not accept a free-form URL.
+Any blank, malformed, URL-shaped, unknown, disabled, or future identifier is rejected, as is a registry that is missing, malformed, contains a duplicate `id`, a duplicate canonical origin, an unexpected root/entry field, a missing/unauthorized `environment`, or a non-canonical/unsafe (non-HTTPS, userinfo, path/query/fragment, trailing-slash/default-port alias, IP-literal, or `localhost`) `origin`. Production scanner wrappers require an authorized `WQT_SITE_ID`; they do not accept a free-form URL, and the production CLI never accepts a caller-controlled registry path (it always resolves against the checked-in `config/targets.json`).
 
 Website-specific capabilities should be added here only when they provide reusable value and fit the LDW preference for deterministic, low-cost, portable, automation-first tooling.

@@ -1,0 +1,6 @@
+{
+  "schemaVersion": "ldw.wqt-target-registry.v1",
+  "sites": [
+    { "id": "example-insecure", "origin": "http://example-insecure.test", "environment": "production", "enabled": true }
+  ]
+}

@@ -1,0 +1,7 @@
+{
+  "schemaVersion": "ldw.wqt-target-registry.v1",
+  "sites": [
+    { "id": "example-one", "origin": "https://example-one.test", "environment": "production", "enabled": true }
+  ],
+  "notes": "this field is not part of the accepted registry contract"
+}

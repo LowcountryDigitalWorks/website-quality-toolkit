@@ -1,0 +1,17 @@
+{
+  "schemaVersion": "ldw.wqt-target-registry.v1",
+  "sites": [
+    {
+      "id": "lowcountrydigitalworks",
+      "origin": "https://lowcountrydigitalworks.com",
+      "environment": "production",
+      "enabled": true
+    },
+    {
+      "id": "donovanfamilydentistry",
+      "origin": "https://donovanfamilydentistry.com",
+      "environment": "production",
+      "enabled": true
+    }
+  ]
+}
