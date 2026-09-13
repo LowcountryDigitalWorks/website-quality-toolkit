@@ -1,4 +1,4 @@
 {
-  "schemaVersion": "ldw.website-quality-targets.v0",
-  "targets": []
+  "schemaVersion": "ldw.wqt-target-registry.v0",
+  "sites": []
 }

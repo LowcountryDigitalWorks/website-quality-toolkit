@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { SITE_ID_PATTERN } from './resolve-target.mjs';
 
 function usage() {
   return 'Usage: node scripts/normalize.mjs --site-id <id> --target <url> --siteone <file> --lighthouse <file> --output <file>';
@@ -111,8 +112,11 @@ const SCHEMA_VERSION = 'ldw.website-quality.v1';
 const SCHEMA_MINOR_VERSION = 1;
 
 export function normalizeEvidence({ siteId, target, siteone, lighthouse }) {
-  if (typeof siteId !== 'string' || siteId.trim() === '') {
-    throw new Error('siteId must be a non-empty string');
+  // Syntax-only check against the shared opaque site-ID pattern. This keeps
+  // normalized machine identity consistent with the target-registry contract
+  // without making the normalizer read the registry itself.
+  if (typeof siteId !== 'string' || !SITE_ID_PATTERN.test(siteId)) {
+    throw new Error('siteId must be a valid opaque site identifier matching ^[a-z0-9][a-z0-9-]{0,63}$');
   }
 
   const siteoneNormalized = normalizeSiteOne(siteone);

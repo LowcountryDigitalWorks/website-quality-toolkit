@@ -3,8 +3,25 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const DEFAULT_REGISTRY_PATH = fileURLToPath(new URL('../config/targets.json', import.meta.url));
-const REGISTRY_SCHEMA_VERSION = 'ldw.website-quality-targets.v1';
-const ID_PATTERN = /^[a-z][a-z0-9-]{1,63}$/;
+
+// Accepted Baseline 0.3 registry contract. Changing this identifier is a
+// workstream-level decision, not a routine code change.
+const REGISTRY_SCHEMA_VERSION = 'ldw.wqt-target-registry.v1';
+
+// Opaque site-ID syntax shared with the normalizer (siteId) so normalized
+// machine identity cannot drift from the target-registry contract.
+export const SITE_ID_PATTERN = /^[a-z0-9][a-z0-9-]{0,63}$/;
+
+// The registry is a public artifact. Only these authorized deployment
+// environments may appear; this keeps the "environment" field explicit
+// while preventing it from becoming a place to smuggle arbitrary metadata.
+const ALLOWED_ENVIRONMENTS = new Set(['production']);
+
+// Exact, closed field sets. Anything else is rejected outright so this
+// public config cannot silently accept secrets, customer records, notes, or
+// other unauthorized metadata.
+const ALLOWED_ROOT_FIELDS = new Set(['schemaVersion', 'sites']);
+const ALLOWED_SITE_FIELDS = new Set(['id', 'origin', 'environment', 'enabled']);
 
 export class TargetResolutionError extends Error {}
 
@@ -14,7 +31,22 @@ function assertPlainObject(value, message) {
   }
 }
 
-function isSafeHttpsOrigin(value) {
+function assertNoUnexpectedFields(value, allowedFields, label) {
+  for (const key of Object.keys(value)) {
+    if (!allowedFields.has(key)) {
+      throw new TargetResolutionError(`${label} has an unexpected field: "${key}"`);
+    }
+  }
+}
+
+/**
+ * A canonical HTTPS origin: `https:` scheme, no userinfo, no path/query/
+ * fragment, a named (non-localhost, non-IP-literal) host, and the supplied
+ * string must be byte-identical to `new URL(origin).origin`. That equality
+ * check is what rejects alias forms of the same origin (trailing slash,
+ * explicit default port, etc.) so exactly one string authorizes each site.
+ */
+function isCanonicalHttpsOrigin(value) {
   if (typeof value !== 'string' || value === '' || value.trim() !== value) return false;
 
   let parsed;
@@ -34,15 +66,16 @@ function isSafeHttpsOrigin(value) {
   if (/^[0-9.]+$/.test(parsed.hostname)) return false;
   if (parsed.hostname.includes(':')) return false;
 
-  return true;
+  return value === parsed.origin;
 }
 
 /**
  * Registry entries are validated exhaustively (not only the requested entry) so a
- * corrupted or unsafe registry fails closed before any lookup is attempted.
+ * corrupted, tampered, or unsafe registry fails closed before any lookup is attempted.
  */
 function validateRegistry(registry, registryPath) {
   assertPlainObject(registry, `Target registry must be a JSON object: ${registryPath}`);
+  assertNoUnexpectedFields(registry, ALLOWED_ROOT_FIELDS, `Target registry (${registryPath})`);
 
   if (registry.schemaVersion !== REGISTRY_SCHEMA_VERSION) {
     throw new TargetResolutionError(
@@ -50,28 +83,47 @@ function validateRegistry(registry, registryPath) {
     );
   }
 
-  if (!Array.isArray(registry.targets) || registry.targets.length === 0) {
-    throw new TargetResolutionError(`Target registry must contain a non-empty "targets" array: ${registryPath}`);
+  if (!Array.isArray(registry.sites) || registry.sites.length === 0) {
+    throw new TargetResolutionError(`Target registry must contain a non-empty "sites" array: ${registryPath}`);
   }
 
   const seenIds = new Set();
-  for (const entry of registry.targets) {
+  const seenOrigins = new Set();
+  for (const entry of registry.sites) {
     assertPlainObject(entry, `Each target registry entry must be a JSON object: ${registryPath}`);
+    assertNoUnexpectedFields(
+      entry,
+      ALLOWED_SITE_FIELDS,
+      `Target registry entry ${JSON.stringify(entry.id ?? null)}`,
+    );
 
-    const { id, url, enabled } = entry;
-    if (typeof id !== 'string' || !ID_PATTERN.test(id)) {
+    const { id, origin, environment, enabled } = entry;
+    if (typeof id !== 'string' || !SITE_ID_PATTERN.test(id)) {
       throw new TargetResolutionError(`Target registry entry has an invalid id: ${JSON.stringify(id)}`);
     }
     if (typeof enabled !== 'boolean') {
       throw new TargetResolutionError(`Target registry entry "${id}" must set "enabled" to true or false`);
     }
-    if (!isSafeHttpsOrigin(url)) {
-      throw new TargetResolutionError(`Target registry entry "${id}" has an unsafe or malformed url`);
+    if (typeof environment !== 'string' || !ALLOWED_ENVIRONMENTS.has(environment)) {
+      throw new TargetResolutionError(
+        `Target registry entry "${id}" must set an explicit, authorized "environment" (one of: ${[...ALLOWED_ENVIRONMENTS].join(', ')})`,
+      );
     }
+    if (!isCanonicalHttpsOrigin(origin)) {
+      throw new TargetResolutionError(`Target registry entry "${id}" has an unsafe or non-canonical origin`);
+    }
+
     if (seenIds.has(id)) {
       throw new TargetResolutionError(`Target registry contains a duplicate id: ${id}`);
     }
     seenIds.add(id);
+
+    // isCanonicalHttpsOrigin already proved `origin === new URL(origin).origin`,
+    // so `origin` itself is the canonical form to track for duplicate detection.
+    if (seenOrigins.has(origin)) {
+      throw new TargetResolutionError(`Target registry contains a duplicate canonical origin: ${origin}`);
+    }
+    seenOrigins.add(origin);
   }
 
   return registry;
@@ -95,16 +147,22 @@ export function loadRegistry(registryPath = DEFAULT_REGISTRY_PATH) {
   return validateRegistry(parsed, registryPath);
 }
 
+/**
+ * The machine-callable contract is: site ID -> fixed repository registry ->
+ * validated exact origin -> scan. `registryPath` exists only so tests can
+ * import this function directly and pass a fixture registry path; the
+ * production CLI below never accepts a caller-controlled registry path.
+ */
 export function resolveTarget(siteIdentifier, registryPath = DEFAULT_REGISTRY_PATH) {
-  if (typeof siteIdentifier !== 'string' || siteIdentifier === '' || siteIdentifier.trim() !== siteIdentifier) {
+  if (typeof siteIdentifier !== 'string' || siteIdentifier === '') {
     throw new TargetResolutionError('Site identifier is required; no default or free-form target is permitted.');
   }
-  if (siteIdentifier.includes('://') || siteIdentifier.includes('/') || siteIdentifier.includes('.')) {
+  if (!SITE_ID_PATTERN.test(siteIdentifier)) {
     throw new TargetResolutionError(`Unauthorized site identifier: ${siteIdentifier}`);
   }
 
   const registry = loadRegistry(registryPath);
-  const match = registry.targets.find((entry) => entry.id === siteIdentifier);
+  const match = registry.sites.find((entry) => entry.id === siteIdentifier);
   if (!match) {
     throw new TargetResolutionError(`Unauthorized site identifier: ${siteIdentifier}`);
   }
@@ -112,19 +170,16 @@ export function resolveTarget(siteIdentifier, registryPath = DEFAULT_REGISTRY_PA
     throw new TargetResolutionError(`Site identifier is disabled in the target registry: ${siteIdentifier}`);
   }
 
-  return match.url;
-}
-
-function resolveRegistryPathFromEnv() {
-  const override = process.env.WQT_TARGET_REGISTRY;
-  return override ? path.resolve(override) : DEFAULT_REGISTRY_PATH;
+  return match.origin;
 }
 
 const invokedDirectly = process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1]);
 if (invokedDirectly) {
   try {
-    const url = resolveTarget(process.argv[2] ?? '', resolveRegistryPathFromEnv());
-    process.stdout.write(`${url}\n`);
+    // No caller-controlled registry path: the production CLI always resolves
+    // against the checked-in repository registry.
+    const origin = resolveTarget(process.argv[2] ?? '');
+    process.stdout.write(`${origin}\n`);
   } catch (error) {
     process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
     process.exitCode = 2;

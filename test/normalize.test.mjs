@@ -26,15 +26,14 @@ test('normalizes evidence without creating LDW quality thresholds', () => {
   ]);
 });
 
-test('rejects a missing or blank siteId', () => {
-  assert.throws(
-    () => normalizeEvidence({ target: 'https://example.test', siteone, lighthouse }),
-    /siteId must be a non-empty string/,
-  );
-  assert.throws(
-    () => normalizeEvidence({ siteId: '  ', target: 'https://example.test', siteone, lighthouse }),
-    /siteId must be a non-empty string/,
-  );
+test('rejects a missing, blank, or syntactically invalid siteId', () => {
+  for (const siteId of [undefined, '', '  ', 'Example-Site', 'example.site', 'example_site', 'https://example.test', '-example']) {
+    assert.throws(
+      () => normalizeEvidence({ siteId, target: 'https://example.test', siteone, lighthouse }),
+      /siteId must be a valid opaque site identifier/,
+      `expected ${JSON.stringify(siteId)} to be rejected`,
+    );
+  }
 });
 
 test('summary labels scanner output as evidence, not a gate', () => {

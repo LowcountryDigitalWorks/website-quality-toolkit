@@ -13,7 +13,9 @@ It keeps the accepted Baseline 0.1/0.2 evidence architecture and the same two au
 - `lowcountrydigitalworks` → `https://lowcountrydigitalworks.com`
 - `donovanfamilydentistry` → `https://donovanfamilydentistry.com`
 
-There is no free-form URL input and no generic public scanner route. Both production scanner wrappers resolve the selected site identifier through the shared `scripts/resolve-target.sh` entry point, which is now backed by the registry, before scanner execution. The `workflow_dispatch` `site` input is a plain opaque string (validated fail-closed against the registry at run time), not a static dropdown that requires a workflow-YAML edit to add or remove an authorized site.
+There is no free-form URL input and no generic public scanner route. Both production scanner wrappers resolve the selected site identifier through the shared `scripts/resolve-target.sh` entry point, which is now backed by the registry, before scanner execution. The `workflow_dispatch` `site` input is a plain, **required, opaque string with no default** (validated fail-closed against the registry at run time), not a static dropdown that requires a workflow-YAML edit to add or remove an authorized site, and not a value that can be silently omitted into a production scan.
+
+**Baseline 0.3 may contain only the two targets already publicly disclosed in Baseline 0.2.** No third or new client/target may be added until the WQT/SEO workstream separately resolves target-registry confidentiality and raw/normalized scan-evidence confidentiality/storage — see [`docs/BASELINE-0.3.md`](docs/BASELINE-0.3.md#public-client-and-evidence-governance-gate). Future additions are **not** merely ordinary public pull requests until that gate is resolved.
 
 The current architecture remains intentionally narrow:
 
@@ -66,7 +68,7 @@ This repository does **not** own:
 
 Organization-wide GitHub workflow orchestration and common repository-security automation belong in [`LowcountryDigitalWorks/.github`](https://github.com/LowcountryDigitalWorks/.github).
 
-Baseline 0.2 also does not add paid SaaS, persistent infrastructure, a database/dashboard, customer credentials/data, PHI, Google/Bing/Cloudflare provider APIs, Activepieces, Pa11y, Linkinator, OWASP ZAP, active DAST, OCR, AI/LLM analysis, automatic issue creation, multi-tenancy, tenant/customer configuration, generic URL scanning, or customer-facing product functionality.
+Baseline 0.3 also does not add paid SaaS, persistent infrastructure, a database/dashboard, customer credentials/data, PHI, Google/Bing/Cloudflare provider APIs, Activepieces, SuiteDash, Pa11y, Linkinator, OWASP ZAP, active DAST, OCR, AI/LLM analysis, automatic issue creation, multi-tenancy, tenant/customer configuration, generic URL scanning, or customer-facing product functionality.
 
 ## Local validation
 
@@ -78,6 +80,7 @@ On WSL/Linux, use Linux-native Node `24.18.1` and npm. Confirm `node` and `npm` 
 npm ci --ignore-scripts --no-audit --no-fund
 npm test
 bash -n scripts/*.sh
+node --check scripts/resolve-target.mjs
 node --check scripts/normalize.mjs
 node --check scripts/write-summary.mjs
 ```
@@ -95,6 +98,6 @@ bash scripts/resolve-target.sh lowcountrydigitalworks
 bash scripts/resolve-target.sh donovanfamilydentistry
 ```
 
-Any blank, malformed, URL-shaped, unknown, disabled, or future identifier is rejected, as is a registry that is missing, malformed, contains a duplicate `id`, or contains an unsafe (non-HTTPS, userinfo, path/query, IP-literal, or `localhost`) entry `url`. Production scanner wrappers require an authorized `WQT_SITE_ID`; they do not accept a free-form URL.
+Any blank, malformed, URL-shaped, unknown, disabled, or future identifier is rejected, as is a registry that is missing, malformed, contains a duplicate `id`, a duplicate canonical origin, an unexpected root/entry field, a missing/unauthorized `environment`, or a non-canonical/unsafe (non-HTTPS, userinfo, path/query/fragment, trailing-slash/default-port alias, IP-literal, or `localhost`) `origin`. Production scanner wrappers require an authorized `WQT_SITE_ID`; they do not accept a free-form URL, and the production CLI never accepts a caller-controlled registry path (it always resolves against the checked-in `config/targets.json`).
 
 Website-specific capabilities should be added here only when they provide reusable value and fit the LDW preference for deterministic, low-cost, portable, automation-first tooling.

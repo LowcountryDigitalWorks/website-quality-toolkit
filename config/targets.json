@@ -1,14 +1,16 @@
 {
-  "schemaVersion": "ldw.website-quality-targets.v1",
-  "targets": [
+  "schemaVersion": "ldw.wqt-target-registry.v1",
+  "sites": [
     {
       "id": "lowcountrydigitalworks",
-      "url": "https://lowcountrydigitalworks.com",
+      "origin": "https://lowcountrydigitalworks.com",
+      "environment": "production",
       "enabled": true
     },
     {
       "id": "donovanfamilydentistry",
-      "url": "https://donovanfamilydentistry.com",
+      "origin": "https://donovanfamilydentistry.com",
+      "environment": "production",
       "enabled": true
     }
   ]

@@ -10,7 +10,6 @@ on:
           config/targets.json at run time; this is an opaque ID, not a URL,
           and an unregistered/disabled value stops the run before any scan.
         required: true
-        default: lowcountrydigitalworks
         type: string
 
 permissions:

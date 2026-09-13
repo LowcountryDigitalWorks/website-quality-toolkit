@@ -1,6 +1,6 @@
 {
-  "schemaVersion": "ldw.website-quality-targets.v1",
-  "targets": [
-    { "id": "example-insecure", "url": "http://example-insecure.test", "enabled": true }
+  "schemaVersion": "ldw.wqt-target-registry.v1",
+  "sites": [
+    { "id": "example-insecure", "origin": "http://example-insecure.test", "environment": "production", "enabled": true }
   ]
 }

@@ -1,7 +1,0 @@
-{
-  "schemaVersion": "ldw.website-quality-targets.v1",
-  "targets": [
-    { "id": "example-one", "url": "https://example-one.test", "enabled": true },
-    { "id": "example-one", "url": "https://example-one-again.test", "enabled": true }
-  ]
-}
