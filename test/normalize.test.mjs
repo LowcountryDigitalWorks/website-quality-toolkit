@@ -8,8 +8,10 @@ const siteone = JSON.parse(fs.readFileSync(new URL('./fixtures/siteone.json', im
 const lighthouse = JSON.parse(fs.readFileSync(new URL('./fixtures/lighthouse.json', import.meta.url), 'utf8'));
 
 test('normalizes evidence without creating LDW quality thresholds', () => {
-  const result = normalizeEvidence({ target: 'https://example.test', siteone, lighthouse });
+  const result = normalizeEvidence({ siteId: 'example-site', target: 'https://example.test', siteone, lighthouse });
   assert.equal(result.schemaVersion, 'ldw.website-quality.v1');
+  assert.equal(result.schemaMinorVersion, 1);
+  assert.equal(result.siteId, 'example-site');
   assert.equal(result.evidenceOnly, true);
   assert.deepEqual(result.gatePolicy, { qualityThresholdsApplied: false, siteOneCiModeEnabled: false });
   assert.equal(result.sources.siteone.version, '2.5.1');
@@ -24,9 +26,21 @@ test('normalizes evidence without creating LDW quality thresholds', () => {
   ]);
 });
 
+test('rejects a missing or blank siteId', () => {
+  assert.throws(
+    () => normalizeEvidence({ target: 'https://example.test', siteone, lighthouse }),
+    /siteId must be a non-empty string/,
+  );
+  assert.throws(
+    () => normalizeEvidence({ siteId: '  ', target: 'https://example.test', siteone, lighthouse }),
+    /siteId must be a non-empty string/,
+  );
+});
+
 test('summary labels scanner output as evidence, not a gate', () => {
-  const result = normalizeEvidence({ target: 'https://example.test', siteone, lighthouse });
+  const result = normalizeEvidence({ siteId: 'example-site', target: 'https://example.test', siteone, lighthouse });
   const summary = renderSummary(result);
+  assert.match(summary, /Site: `example-site`/);
   assert.match(summary, /Evidence only/);
   assert.match(summary, /SiteOne `--ci` mode is intentionally disabled/);
   assert.match(summary, /Performance: 92/);
@@ -34,6 +48,12 @@ test('summary labels scanner output as evidence, not a gate', () => {
 });
 
 test('rejects malformed scanner evidence', () => {
-  assert.throws(() => normalizeEvidence({ target: 'https://example.test', siteone: {}, lighthouse }), /crawler metadata/);
-  assert.throws(() => normalizeEvidence({ target: 'https://example.test', siteone, lighthouse: {} }), /lighthouseVersion/);
+  assert.throws(
+    () => normalizeEvidence({ siteId: 'example-site', target: 'https://example.test', siteone: {}, lighthouse }),
+    /crawler metadata/,
+  );
+  assert.throws(
+    () => normalizeEvidence({ siteId: 'example-site', target: 'https://example.test', siteone, lighthouse: {} }),
+    /lighthouseVersion/,
+  );
 });

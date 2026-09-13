@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 function usage() {
-  return 'Usage: node scripts/normalize.mjs --target <url> --siteone <file> --lighthouse <file> --output <file>';
+  return 'Usage: node scripts/normalize.mjs --site-id <id> --target <url> --siteone <file> --lighthouse <file> --output <file>';
 }
 
 function parseArgs(argv) {
@@ -13,7 +13,7 @@ function parseArgs(argv) {
     if (!key?.startsWith('--') || value === undefined) throw new Error(usage());
     args[key.slice(2)] = value;
   }
-  for (const required of ['target', 'siteone', 'lighthouse', 'output']) {
+  for (const required of ['site-id', 'target', 'siteone', 'lighthouse', 'output']) {
     if (!args[required]) throw new Error(`Missing --${required}. ${usage()}`);
   }
   return args;
@@ -95,11 +95,32 @@ function normalizeLighthouse(raw) {
   };
 }
 
-export function normalizeEvidence({ target, siteone, lighthouse }) {
+// Evidence schema versioning decision (Baseline 0.3):
+//   `schemaVersion` identifies the major, potentially-breaking evidence shape
+//   ("ldw.website-quality.v1") and is unchanged from Baseline 0.1/0.2 because no
+//   existing field was removed, renamed, or given new meaning.
+//   `schemaMinorVersion` is a separate, purely additive counter. It starts at 0
+//   for the original Baseline 0.1/0.2 shape (implicit) and increments to 1 for
+//   Baseline 0.3's addition of `siteId`. Consumers that do not recognize
+//   `schemaMinorVersion` can safely ignore it; consumers that need the new
+//   field should check `schemaMinorVersion >= 1` rather than parsing
+//   `schemaVersion` as a compound string. A future breaking change must bump
+//   `schemaVersion` (e.g. `.v2`) and reset `schemaMinorVersion`, not overload
+//   the minor counter.
+const SCHEMA_VERSION = 'ldw.website-quality.v1';
+const SCHEMA_MINOR_VERSION = 1;
+
+export function normalizeEvidence({ siteId, target, siteone, lighthouse }) {
+  if (typeof siteId !== 'string' || siteId.trim() === '') {
+    throw new Error('siteId must be a non-empty string');
+  }
+
   const siteoneNormalized = normalizeSiteOne(siteone);
   const lighthouseNormalized = normalizeLighthouse(lighthouse);
   return {
-    schemaVersion: 'ldw.website-quality.v1',
+    schemaVersion: SCHEMA_VERSION,
+    schemaMinorVersion: SCHEMA_MINOR_VERSION,
+    siteId,
     target,
     evidenceOnly: true,
     gatePolicy: {
@@ -119,6 +140,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   try {
     const args = parseArgs(process.argv.slice(2));
     const normalized = normalizeEvidence({
+      siteId: args['site-id'],
       target: args.target,
       siteone: readJson(args.siteone),
       lighthouse: readJson(args.lighthouse),

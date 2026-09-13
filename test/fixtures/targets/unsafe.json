@@ -1,0 +1,6 @@
+{
+  "schemaVersion": "ldw.website-quality-targets.v1",
+  "targets": [
+    { "id": "example-insecure", "url": "http://example-insecure.test", "enabled": true }
+  ]
+}

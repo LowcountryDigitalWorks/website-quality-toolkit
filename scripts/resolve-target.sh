@@ -1,21 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SITE_IDENTIFIER="${1:-}"
-
-case "$SITE_IDENTIFIER" in
-  lowcountrydigitalworks)
-    printf '%s\n' 'https://lowcountrydigitalworks.com'
-    ;;
-  donovanfamilydentistry)
-    printf '%s\n' 'https://donovanfamilydentistry.com'
-    ;;
-  '')
-    echo 'Site identifier is required; no default or free-form target is permitted.' >&2
-    exit 2
-    ;;
-  *)
-    printf 'Unauthorized site identifier: %s\n' "$SITE_IDENTIFIER" >&2
-    exit 2
-    ;;
-esac
+# Thin CLI wrapper: the target registry (config/targets.json) is the single
+# source of truth. Actual parsing/validation lives in resolve-target.mjs so it
+# is unit-testable directly and shares fail-closed logic with any future
+# non-shell caller.
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+exec node "${ROOT_DIR}/scripts/resolve-target.mjs" "${1:-}"

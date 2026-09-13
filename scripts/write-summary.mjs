@@ -5,6 +5,8 @@ function formatScore(score) {
 }
 
 export function renderSummary(data) {
+  // Only the major schema identifier gates support; `schemaMinorVersion` is
+  // purely additive, so an unknown or absent minor version is not an error.
   if (data?.schemaVersion !== 'ldw.website-quality.v1') throw new Error('Unsupported normalized evidence schema');
   const siteone = data.sources?.siteone;
   const lighthouse = data.sources?.lighthouse;
@@ -26,8 +28,9 @@ export function renderSummary(data) {
     .join(', ') || 'none';
 
   return [
-    '# Website Quality Baseline 0.1',
+    '# Website Quality Evidence Summary',
     '',
+    `Site: \`${data.siteId ?? 'unknown'}\``,
     `Target: \`${data.target}\``,
     '',
     '> Evidence only. No LDW quality threshold is applied, and SiteOne `--ci` mode is intentionally disabled.',

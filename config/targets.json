@@ -1,0 +1,15 @@
+{
+  "schemaVersion": "ldw.website-quality-targets.v1",
+  "targets": [
+    {
+      "id": "lowcountrydigitalworks",
+      "url": "https://lowcountrydigitalworks.com",
+      "enabled": true
+    },
+    {
+      "id": "donovanfamilydentistry",
+      "url": "https://donovanfamilydentistry.com",
+      "enabled": true
+    }
+  ]
+}
