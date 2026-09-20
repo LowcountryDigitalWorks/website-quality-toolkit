@@ -56,3 +56,99 @@ test('rejects malformed scanner evidence', () => {
     /lighthouseVersion/,
   );
 });
+
+test('normalizes scanner evidence with deterministic ordering', () => {
+  const unorderedSiteone = {
+    crawler: { version: '2.5.1' },
+    qualityScores: {
+      categories: [
+        { code: 'seo', name: 'SEO', score: 9.5, label: 'Excellent' },
+        { code: 'accessibility', name: 'Accessibility', score: 8.5, label: 'Good' },
+      ],
+    },
+    summary: {
+      items: [
+        { aplCode: 'zzz', status: 'WARNING', text: 'last' },
+        { aplCode: 'aaa', status: 'NOTICE', text: 'first' },
+      ],
+    },
+  };
+  const unorderedLighthouse = {
+    lighthouseVersion: '13.4.1',
+    categories: {
+      seo: { title: 'SEO', score: 1 },
+      performance: { title: 'Performance', score: 0.92 },
+    },
+    audits: {
+      'z-audit': { title: 'Z' },
+      'a-audit': { title: 'A' },
+    },
+  };
+
+  const result = normalizeEvidence({
+    siteId: 'example-site',
+    target: 'https://example.test',
+    siteone: unorderedSiteone,
+    lighthouse: unorderedLighthouse,
+  });
+
+  assert.deepEqual(result.sources.siteone.categoryScores.map((item) => item.code), ['accessibility', 'seo']);
+  assert.deepEqual(
+    result.sources.siteone.observations.map((item) => `${item.sourceStatus}:${item.code}`),
+    ['NOTICE:aaa', 'WARNING:zzz'],
+  );
+  assert.deepEqual(result.sources.lighthouse.categoryScores.map((item) => item.id), ['performance', 'seo']);
+  assert.deepEqual(result.sources.lighthouse.observations.map((item) => item.code), ['a-audit', 'z-audit']);
+});
+
+test('preserves null fallbacks for sparse optional scanner fields', () => {
+  const sparseSiteone = {
+    crawler: { version: '2.5.1' },
+    qualityScores: {
+      categories: [{}],
+      overall: {},
+    },
+    summary: {
+      items: [{}],
+    },
+  };
+  const sparseLighthouse = {
+    lighthouseVersion: '13.4.1',
+    categories: {
+      seo: {},
+    },
+    audits: {
+      'document-title': {},
+    },
+  };
+
+  const result = normalizeEvidence({
+    siteId: 'example-site',
+    target: 'https://example.test',
+    siteone: sparseSiteone,
+    lighthouse: sparseLighthouse,
+  });
+
+  assert.deepEqual(result.sources.siteone.categoryScores, [{ code: null, name: null, score: null, label: null }]);
+  assert.deepEqual(result.sources.siteone.observations, [
+    { source: 'siteone', code: null, sourceStatus: null, message: null },
+  ]);
+  assert.equal(result.sources.siteone.command, null);
+  assert.equal(result.sources.siteone.executedAt, null);
+  assert.equal(result.sources.siteone.overallScore, null);
+  assert.deepEqual(result.sources.lighthouse.categoryScores, [{ id: 'seo', title: null, score: null }]);
+  assert.deepEqual(result.sources.lighthouse.observations, [{
+    source: 'lighthouse',
+    code: 'document-title',
+    title: null,
+    score: null,
+    scoreDisplayMode: null,
+    displayValue: null,
+    numericValue: null,
+    numericUnit: null,
+  }]);
+  assert.equal(result.sources.lighthouse.fetchTime, null);
+  assert.equal(result.sources.lighthouse.requestedUrl, null);
+  assert.equal(result.sources.lighthouse.finalUrl, null);
+  assert.equal(result.sources.lighthouse.userAgent, null);
+});
