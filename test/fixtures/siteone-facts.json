@@ -1,0 +1,30 @@
+{
+  "crawler": {"command":"siteone-crawler --url=https://example.test --output=json","executedAt":"2026-09-23 00:00:00","name":"SiteOne Crawler","version":"2.5.1"},
+  "qualityScores": {"categories":[],"overall":{"score":8.8}},
+  "summary": {"items":[
+    {"aplCode":"static-assets-short-cache","status":"NOTICE","text":"display wording only: eleven short-cache assets"},
+    {"aplCode":"redirects","status":"NOTICE","text":"display wording only: one redirect"}
+  ]},
+  "results": [
+    {"url":"https://example.test/a.js","status":"200","type":2,"cacheTypeFlags":0,"cacheLifetime":3600},
+    {"url":"https://www.example.test/a.css","status":"200","type":3,"cacheTypeFlags":0,"cacheLifetime":86399},
+    {"url":"https://example.test/a.png","status":"200","type":4,"cacheTypeFlags":1024,"cacheLifetime":86400},
+    {"url":"https://example.test/a.mp4","status":"200","type":5,"cacheTypeFlags":0,"cacheLifetime":null},
+    {"url":"https://example.test/a.woff2","status":"200","type":6,"cacheTypeFlags":0,"cacheLifetime":0},
+    {"url":"https://example.test/a.pdf","status":"200","type":7,"cacheTypeFlags":0,"cacheLifetime":1},
+    {"url":"https://example.test/a.mp3","status":"200","type":11,"cacheTypeFlags":0,"cacheLifetime":100},
+    {"url":"https://example.test/b.js","status":"200","type":2,"cacheTypeFlags":1024,"cacheLifetime":null},
+    {"url":"https://example.test/b.css","status":"200","type":3,"cacheTypeFlags":0,"cacheLifetime":500},
+    {"url":"https://example.test/b.png","status":"200","type":4,"cacheTypeFlags":1,"cacheLifetime":1000},
+    {"url":"https://example.test/b.mp4","status":"200","type":5,"cacheTypeFlags":0,"cacheLifetime":86398},
+    {"url":"https://example.test/long.js","status":"200","type":2,"cacheTypeFlags":0,"cacheLifetime":86400},
+    {"url":"https://example.test/no-store.css","status":"200","type":3,"cacheTypeFlags":2048,"cacheLifetime":3600},
+    {"url":"https://example.test/no-headers.png","status":"200","type":4,"cacheTypeFlags":32768,"cacheLifetime":null},
+    {"url":"https://example.test/index.html","status":"200","type":1,"cacheTypeFlags":0,"cacheLifetime":0},
+    {"url":"https://example.test/data.json","status":"200","type":8,"cacheTypeFlags":0,"cacheLifetime":0},
+    {"url":"https://example.test/feed.xml","status":"200","type":12,"cacheTypeFlags":0,"cacheLifetime":0},
+    {"url":"https://cdn.example.net/external.js","status":"200","type":2,"cacheTypeFlags":0,"cacheLifetime":0},
+    {"url":"https://example.test/not-200.js","status":"304","type":2,"cacheTypeFlags":0,"cacheLifetime":0}
+  ],
+  "tables": {"redirects":{"rows":[{"statusCode":"301","url":"https://example.test/old","targetUrl":"https://example.test/new","sourceUqId":"/"}]}}
+}
