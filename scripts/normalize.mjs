@@ -9,6 +9,7 @@ const FACT_ALLOWED_KEYS = new Set(['id', 'valueType', 'value', 'unit']);
 const COUNT_FACT_IDS = new Set(['affected-resource-count', 'redirect-count']);
 const MAX_FACTS_PER_FINDING = 8;
 const MAX_TEXT_CODE_UNITS = 256;
+const SITEONE_CONTENT_TYPE_IDS = new Set([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
 const STATIC_CONTENT_TYPE_IDS = new Set([2, 3, 4, 5, 6, 7, 11]);
 const CACHE_FLAG_NO_CACHE = 1024;
 const CACHE_FLAG_NO_STORE = 2048;
@@ -135,15 +136,21 @@ function normalizedHostname(value, label) {
   return parsed.hostname.startsWith('www.') ? parsed.hostname.slice(4) : parsed.hostname;
 }
 
-function tryNormalizedResultHostname(value) {
-  if (typeof value !== 'string') return null;
-  try {
-    const parsed = new URL(value);
-    if (!parsed.hostname) return null;
-    return parsed.hostname.startsWith('www.') ? parsed.hostname.slice(4) : parsed.hostname;
-  } catch {
-    return null;
+function normalizedResultHostname(value, index) {
+  if (typeof value !== 'string') {
+    throw new Error(`SiteOne result[${index}].url must be a string containing an absolute URL with a hostname`);
   }
+
+  let parsed;
+  try {
+    parsed = new URL(value);
+  } catch {
+    throw new Error(`SiteOne result[${index}].url must be a parseable absolute URL with a hostname`);
+  }
+  if (!parsed.hostname) {
+    throw new Error(`SiteOne result[${index}].url must be a parseable absolute URL with a hostname`);
+  }
+  return parsed.hostname.startsWith('www.') ? parsed.hostname.slice(4) : parsed.hostname;
 }
 
 function extractStaticShortCacheFacts(raw, target) {
@@ -154,10 +161,22 @@ function extractStaticShortCacheFacts(raw, target) {
   const targetHostname = normalizedHostname(target, 'target');
   let count = 0;
 
-  for (const result of raw.results) {
-    if (!isPlainObject(result)) continue;
-    const resultHostname = tryNormalizedResultHostname(result.url);
-    if (resultHostname === null) continue;
+  for (const [index, result] of raw.results.entries()) {
+    if (!isPlainObject(result)) {
+      throw new Error(`SiteOne result[${index}] must be a JSON object`);
+    }
+
+    const resultHostname = normalizedResultHostname(result.url, index);
+
+    if (typeof result.status !== 'string') {
+      throw new Error(`SiteOne result[${index}].status must be a string`);
+    }
+
+    assertNonNegativeSafeInteger(result.type, `SiteOne result[${index}].type`);
+    if (!SITEONE_CONTENT_TYPE_IDS.has(result.type)) {
+      throw new Error(`SiteOne result[${index}].type must be a supported SiteOne 2.5.1 content-type ID (1 through 12)`);
+    }
+
     if (result.status !== '200') continue;
     if (resultHostname !== targetHostname) continue;
     if (!STATIC_CONTENT_TYPE_IDS.has(result.type)) continue;

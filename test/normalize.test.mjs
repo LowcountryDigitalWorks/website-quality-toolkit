@@ -260,6 +260,82 @@ test('matching approved findings fail closed when required structured data is mi
   assert.throws(() => normalize(malformedRedirect), /301 through 308/);
 });
 
+test('static-assets-short-cache fails closed for malformed SiteOne results row structure', () => {
+  const cases = [
+    {
+      name: 'non-object row',
+      mutate(input) { input.results[0] = 'not-an-object'; },
+      pattern: /result\[0\] must be a JSON object/,
+    },
+    {
+      name: 'missing URL',
+      mutate(input) { delete input.results[0].url; },
+      pattern: /result\[0\]\.url must be a string/,
+    },
+    {
+      name: 'non-string URL',
+      mutate(input) { input.results[0].url = 42; },
+      pattern: /result\[0\]\.url must be a string/,
+    },
+    {
+      name: 'invalid absolute URL',
+      mutate(input) { input.results[0].url = 'not an absolute url'; },
+      pattern: /parseable absolute URL/,
+    },
+    {
+      name: 'missing status',
+      mutate(input) { delete input.results[0].status; },
+      pattern: /result\[0\]\.status must be a string/,
+    },
+    {
+      name: 'non-string status',
+      mutate(input) { input.results[0].status = 200; },
+      pattern: /result\[0\]\.status must be a string/,
+    },
+    {
+      name: 'missing type',
+      mutate(input) { delete input.results[0].type; },
+      pattern: /result\[0\]\.type must be a non-negative safe integer/,
+    },
+    {
+      name: 'string type',
+      mutate(input) { input.results[0].type = '2'; },
+      pattern: /result\[0\]\.type must be a non-negative safe integer/,
+    },
+    {
+      name: 'unsupported SiteOne type',
+      mutate(input) { input.results[0].type = 13; },
+      pattern: /supported SiteOne 2\.5\.1 content-type ID/,
+    },
+  ];
+
+  for (const scenario of cases) {
+    const input = clone(siteoneFacts);
+    scenario.mutate(input);
+    assert.throws(
+      () => normalize(input),
+      scenario.pattern,
+      `expected malformed case "${scenario.name}" to fail closed`,
+    );
+  }
+});
+
+test('valid non-qualifying SiteOne results remain ordinary cache-fact filters', () => {
+  const input = clone(siteoneFacts);
+  input.results = [
+    { url: 'https://example.test/not-200.js', status: '304', type: 2, cacheTypeFlags: 0, cacheLifetime: 0 },
+    { url: 'https://cdn.example.net/external.js', status: '200', type: 2, cacheTypeFlags: 0, cacheLifetime: 0 },
+    { url: 'https://example.test/index.html', status: '200', type: 1, cacheTypeFlags: 0, cacheLifetime: 0 },
+    { url: 'https://example.test/data.json', status: '200', type: 8, cacheTypeFlags: 0, cacheLifetime: 0 },
+    { url: 'https://example.test/redirect', status: '200', type: 9, cacheTypeFlags: 0, cacheLifetime: 0 },
+    { url: 'https://example.test/other.bin', status: '200', type: 10, cacheTypeFlags: 0, cacheLifetime: 0 },
+    { url: 'https://example.test/feed.xml', status: '200', type: 12, cacheTypeFlags: 0, cacheLifetime: 0 },
+  ];
+
+  const result = normalize(input);
+  assert.equal(factValue(result, 'static-assets-short-cache', 'affected-resource-count'), 0);
+});
+
 test('unrelated SiteOne observations omit facts', () => {
   const result = normalizeEvidence({ siteId: 'example-site', target: 'https://example.test', siteone, lighthouse });
   for (const observation of result.sources.siteone.observations) {

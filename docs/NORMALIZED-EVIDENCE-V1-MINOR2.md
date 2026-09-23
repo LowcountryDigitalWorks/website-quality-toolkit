@@ -60,15 +60,16 @@ The value is derived only from SiteOne 2.5.1 `results[]`. The human-readable sum
 For a matching `static-assets-short-cache` finding:
 
 1. `results` must be an array or normalization fails closed.
-2. A candidate row is a JSON object with a parseable absolute URL.
-3. Candidate `status` must equal string `"200"`.
-4. Candidate URL hostname must be internal to the WQT target. Hostnames compare exactly after removing at most one leading `www.` from each side.
-5. Eligible SiteOne content-type IDs are exactly `2`, `3`, `4`, `5`, `6`, `7`, and `11` (Script, Stylesheet, Image, Video, Font, Document, Audio).
-6. For each eligible candidate, `cacheTypeFlags` must be a non-negative safe integer. `cacheLifetime` must be either `null` or a non-negative safe integer. Malformed required cache fields fail closed.
-7. A row is classified as uncacheable and excluded when flag `2048` (`no-store`) or `32768` (no cache headers) is set.
-8. Otherwise the row is counted when flag `1024` (`no-cache`) is set, `cacheLifetime === null`, or `cacheLifetime < 86400`.
-9. Otherwise `cacheLifetime >= 86400` is long-lived and is not counted.
-10. The observed result is emitted even when the count is `0`.
+2. Every `results[]` row must be a plain JSON object whose `url` is a string containing a parseable absolute URL with a hostname; malformed rows fail closed before filtering.
+3. Every row must have string `status`. Structurally valid statuses other than `"200"` are then ignored normally.
+4. Every row must have a non-negative safe-integer `type` using a supported SiteOne 2.5.1 content-type ID from `1` through `12`; malformed or unsupported IDs fail closed.
+5. Candidate URL hostname must be internal to the WQT target. Hostnames compare exactly after removing at most one leading `www.` from each side; valid external rows are ignored normally.
+6. Eligible static SiteOne content-type IDs are exactly `2`, `3`, `4`, `5`, `6`, `7`, and `11` (Script, Stylesheet, Image, Video, Font, Document, Audio). Valid non-static IDs `1`, `8`, `9`, `10`, and `12` are ignored normally.
+7. For each valid internal HTTP 200 static candidate, `cacheTypeFlags` must be a non-negative safe integer. `cacheLifetime` must be either `null` or a non-negative safe integer. Malformed required cache fields fail closed.
+8. A row is classified as uncacheable and excluded when flag `2048` (`no-store`) or `32768` (no cache headers) is set.
+9. Otherwise the row is counted when flag `1024` (`no-cache`) is set, `cacheLifetime === null`, or `cacheLifetime < 86400`.
+10. Otherwise `cacheLifetime >= 86400` is long-lived and is not counted.
+11. The observed result is emitted even when the count is `0`.
 
 The checked-in fixture is synthetic. Real Gate #25 artifacts used to verify the rule are not committed.
 
