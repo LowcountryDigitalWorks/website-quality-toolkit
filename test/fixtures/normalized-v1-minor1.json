@@ -1,0 +1,124 @@
+{
+  "schemaVersion": "ldw.website-quality.v1",
+  "schemaMinorVersion": 1,
+  "siteId": "example-site",
+  "target": "https://example.test",
+  "evidenceOnly": true,
+  "gatePolicy": {
+    "qualityThresholdsApplied": false,
+    "siteOneCiModeEnabled": false
+  },
+  "sources": {
+    "siteone": {
+      "tool": "SiteOne Crawler",
+      "version": "2.5.1",
+      "executedAt": "2026-08-16 00:00:00",
+      "command": "siteone-crawler --url=https://example.test --output=json",
+      "overallScore": 8.7,
+      "categoryScores": [
+        {
+          "code": "security",
+          "name": "Security",
+          "score": 8,
+          "label": "Good"
+        },
+        {
+          "code": "seo",
+          "name": "SEO",
+          "score": 9.5,
+          "label": "Excellent"
+        }
+      ],
+      "observations": [
+        {
+          "source": "siteone",
+          "code": "robots-txt-example.test",
+          "sourceStatus": "NOTICE",
+          "message": "Loaded robots.txt"
+        },
+        {
+          "source": "siteone",
+          "code": "404",
+          "sourceStatus": "WARNING",
+          "message": "One missing page"
+        }
+      ]
+    },
+    "lighthouse": {
+      "tool": "Lighthouse",
+      "version": "13.4.1",
+      "fetchTime": "2026-08-16T00:00:00.000Z",
+      "requestedUrl": "https://example.test/",
+      "finalUrl": "https://example.test/",
+      "userAgent": "fixture",
+      "categoryScores": [
+        {
+          "id": "performance",
+          "title": "Performance",
+          "score": 0.92
+        },
+        {
+          "id": "seo",
+          "title": "SEO",
+          "score": 1
+        }
+      ],
+      "observations": [
+        {
+          "source": "lighthouse",
+          "code": "document-title",
+          "title": "Document has a title",
+          "score": 1,
+          "scoreDisplayMode": "binary",
+          "displayValue": null,
+          "numericValue": null,
+          "numericUnit": null
+        },
+        {
+          "source": "lighthouse",
+          "code": "first-contentful-paint",
+          "title": "First Contentful Paint",
+          "score": 0.9,
+          "scoreDisplayMode": "numeric",
+          "displayValue": "1.2 s",
+          "numericValue": 1200,
+          "numericUnit": "millisecond"
+        }
+      ]
+    }
+  },
+  "observations": [
+    {
+      "source": "lighthouse",
+      "code": "document-title",
+      "title": "Document has a title",
+      "score": 1,
+      "scoreDisplayMode": "binary",
+      "displayValue": null,
+      "numericValue": null,
+      "numericUnit": null
+    },
+    {
+      "source": "lighthouse",
+      "code": "first-contentful-paint",
+      "title": "First Contentful Paint",
+      "score": 0.9,
+      "scoreDisplayMode": "numeric",
+      "displayValue": "1.2 s",
+      "numericValue": 1200,
+      "numericUnit": "millisecond"
+    },
+    {
+      "source": "siteone",
+      "code": "404",
+      "sourceStatus": "WARNING",
+      "message": "One missing page"
+    },
+    {
+      "source": "siteone",
+      "code": "robots-txt-example.test",
+      "sourceStatus": "NOTICE",
+      "message": "Loaded robots.txt"
+    }
+  ]
+}

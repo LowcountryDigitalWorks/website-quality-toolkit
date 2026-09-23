@@ -2,6 +2,20 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { SITE_ID_PATTERN } from './resolve-target.mjs';
 
+const FACT_ID_PATTERN = /^[a-z0-9][a-z0-9-]{0,63}$/;
+const FACT_UNIT_PATTERN = /^[a-z][a-z0-9-]{0,31}$/;
+const FACT_VALUE_TYPES = new Set(['number', 'text', 'boolean']);
+const FACT_ALLOWED_KEYS = new Set(['id', 'valueType', 'value', 'unit']);
+const COUNT_FACT_IDS = new Set(['affected-resource-count', 'redirect-count']);
+const MAX_FACTS_PER_FINDING = 8;
+const MAX_TEXT_CODE_UNITS = 256;
+const SITEONE_CONTENT_TYPE_IDS = new Set([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
+const STATIC_CONTENT_TYPE_IDS = new Set([2, 3, 4, 5, 6, 7, 11]);
+const CACHE_FLAG_NO_CACHE = 1024;
+const CACHE_FLAG_NO_STORE = 2048;
+const CACHE_FLAG_NO_CACHE_HEADERS = 32768;
+const SHORT_CACHE_SECONDS = 86400;
+
 function usage() {
   return 'Usage: node scripts/normalize.mjs --site-id <id> --target <url> --siteone <file> --lighthouse <file> --output <file>';
 }
@@ -24,13 +38,206 @@ function readJson(file) {
   return JSON.parse(fs.readFileSync(file, 'utf8'));
 }
 
+function isPlainObject(value) {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+    && Object.getPrototypeOf(value) === Object.prototype;
+}
+
 function assertObject(value, name) {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+  if (!isPlainObject(value)) {
     throw new Error(`${name} must be a JSON object`);
   }
 }
 
-function normalizeSiteOne(raw) {
+function asciiCompare(a, b) {
+  if (a < b) return -1;
+  if (a > b) return 1;
+  return 0;
+}
+
+function hasFlag(value, flag) {
+  return Math.floor(value / flag) % 2 === 1;
+}
+
+function assertNonNegativeSafeInteger(value, label) {
+  if (!Number.isSafeInteger(value) || value < 0) {
+    throw new Error(`${label} must be a non-negative safe integer`);
+  }
+}
+
+export function validateFacts(facts) {
+  if (!Array.isArray(facts)) throw new Error('facts must be an array');
+  if (facts.length > MAX_FACTS_PER_FINDING) {
+    throw new Error(`facts must contain no more than ${MAX_FACTS_PER_FINDING} entries`);
+  }
+
+  const seenIds = new Set();
+  const validated = facts.map((fact, index) => {
+    if (!isPlainObject(fact)) throw new Error(`fact[${index}] must be a JSON object`);
+
+    for (const key of Object.keys(fact)) {
+      if (!FACT_ALLOWED_KEYS.has(key)) throw new Error(`fact[${index}] has unexpected key: ${key}`);
+    }
+    for (const key of ['id', 'valueType', 'value']) {
+      if (!Object.prototype.hasOwnProperty.call(fact, key)) throw new Error(`fact[${index}] is missing required key: ${key}`);
+    }
+
+    if (typeof fact.id !== 'string' || !FACT_ID_PATTERN.test(fact.id)) {
+      throw new Error(`fact[${index}].id must match ${FACT_ID_PATTERN}`);
+    }
+    if (seenIds.has(fact.id)) throw new Error(`duplicate fact id: ${fact.id}`);
+    seenIds.add(fact.id);
+
+    if (!FACT_VALUE_TYPES.has(fact.valueType)) {
+      throw new Error(`fact[${index}].valueType must be one of: number, text, boolean`);
+    }
+
+    if (Object.prototype.hasOwnProperty.call(fact, 'unit')) {
+      if (typeof fact.unit !== 'string' || !FACT_UNIT_PATTERN.test(fact.unit)) {
+        throw new Error(`fact[${index}].unit must match ${FACT_UNIT_PATTERN}`);
+      }
+    }
+
+    if (fact.value !== null) {
+      if (fact.valueType === 'number') {
+        if (typeof fact.value !== 'number' || !Number.isFinite(fact.value) || Math.abs(fact.value) > Number.MAX_SAFE_INTEGER) {
+          throw new Error(`fact[${index}].value must be a finite number within Number.MAX_SAFE_INTEGER`);
+        }
+      } else if (fact.valueType === 'text') {
+        if (typeof fact.value !== 'string' || fact.value.length > MAX_TEXT_CODE_UNITS) {
+          throw new Error(`fact[${index}].value must be a string of at most ${MAX_TEXT_CODE_UNITS} code units`);
+        }
+      } else if (typeof fact.value !== 'boolean') {
+        throw new Error(`fact[${index}].value must be a boolean`);
+      }
+    }
+
+    if (COUNT_FACT_IDS.has(fact.id)) {
+      if (fact.valueType !== 'number' || fact.unit !== 'count') {
+        throw new Error(`${fact.id} must use valueType "number" and unit "count"`);
+      }
+      if (fact.value !== null) assertNonNegativeSafeInteger(fact.value, `${fact.id}.value`);
+    }
+
+    return { ...fact };
+  });
+
+  return validated.sort((a, b) => asciiCompare(a.id, b.id));
+}
+
+function normalizedHostname(value, label) {
+  let parsed;
+  try {
+    parsed = new URL(value);
+  } catch {
+    throw new Error(`${label} must be an absolute URL`);
+  }
+  if (!parsed.hostname) throw new Error(`${label} must include a hostname`);
+  return parsed.hostname.startsWith('www.') ? parsed.hostname.slice(4) : parsed.hostname;
+}
+
+function normalizedResultHostname(value, index) {
+  if (typeof value !== 'string') {
+    throw new Error(`SiteOne result[${index}].url must be a string containing an absolute URL with a hostname`);
+  }
+
+  let parsed;
+  try {
+    parsed = new URL(value);
+  } catch {
+    throw new Error(`SiteOne result[${index}].url must be a parseable absolute URL with a hostname`);
+  }
+  if (!parsed.hostname) {
+    throw new Error(`SiteOne result[${index}].url must be a parseable absolute URL with a hostname`);
+  }
+  return parsed.hostname.startsWith('www.') ? parsed.hostname.slice(4) : parsed.hostname;
+}
+
+function extractStaticShortCacheFacts(raw, target) {
+  if (!Array.isArray(raw.results)) {
+    throw new Error('static-assets-short-cache requires SiteOne results[]');
+  }
+
+  const targetHostname = normalizedHostname(target, 'target');
+  let count = 0;
+
+  for (const [index, result] of raw.results.entries()) {
+    if (!isPlainObject(result)) {
+      throw new Error(`SiteOne result[${index}] must be a JSON object`);
+    }
+
+    const resultHostname = normalizedResultHostname(result.url, index);
+
+    if (typeof result.status !== 'string') {
+      throw new Error(`SiteOne result[${index}].status must be a string`);
+    }
+
+    assertNonNegativeSafeInteger(result.type, `SiteOne result[${index}].type`);
+    if (!SITEONE_CONTENT_TYPE_IDS.has(result.type)) {
+      throw new Error(`SiteOne result[${index}].type must be a supported SiteOne 2.5.1 content-type ID (1 through 12)`);
+    }
+
+    if (result.status !== '200') continue;
+    if (resultHostname !== targetHostname) continue;
+    if (!STATIC_CONTENT_TYPE_IDS.has(result.type)) continue;
+
+    assertNonNegativeSafeInteger(result.cacheTypeFlags, 'SiteOne result cacheTypeFlags');
+    if (result.cacheLifetime !== null) {
+      assertNonNegativeSafeInteger(result.cacheLifetime, 'SiteOne result cacheLifetime');
+    }
+
+    if (hasFlag(result.cacheTypeFlags, CACHE_FLAG_NO_STORE)
+      || hasFlag(result.cacheTypeFlags, CACHE_FLAG_NO_CACHE_HEADERS)) {
+      continue;
+    }
+
+    if (hasFlag(result.cacheTypeFlags, CACHE_FLAG_NO_CACHE)
+      || result.cacheLifetime === null
+      || result.cacheLifetime < SHORT_CACHE_SECONDS) {
+      count += 1;
+    }
+  }
+
+  return validateFacts([{
+    id: 'affected-resource-count',
+    valueType: 'number',
+    value: count,
+    unit: 'count',
+  }]);
+}
+
+function extractRedirectFacts(raw) {
+  if (!isPlainObject(raw.tables)
+    || !isPlainObject(raw.tables.redirects)
+    || !Array.isArray(raw.tables.redirects.rows)) {
+    throw new Error('redirects requires SiteOne tables.redirects.rows[]');
+  }
+
+  for (const [index, row] of raw.tables.redirects.rows.entries()) {
+    if (!isPlainObject(row)) throw new Error(`redirect row[${index}] must be a JSON object`);
+    for (const key of ['statusCode', 'url', 'targetUrl', 'sourceUqId']) {
+      if (typeof row[key] !== 'string') throw new Error(`redirect row[${index}].${key} must be a string`);
+    }
+    if (!/^30[1-8]$/.test(row.statusCode)) {
+      throw new Error(`redirect row[${index}].statusCode must be a redirect status from 301 through 308`);
+    }
+  }
+
+  return validateFacts([{
+    id: 'redirect-count',
+    valueType: 'number',
+    value: raw.tables.redirects.rows.length,
+    unit: 'count',
+  }]);
+}
+
+function extractSiteOneFacts(raw, target, code) {
+  if (code === 'static-assets-short-cache') return extractStaticShortCacheFacts(raw, target);
+  if (code === 'redirects') return extractRedirectFacts(raw);
+  return undefined;
+}
+
+function normalizeSiteOne(raw, target) {
   assertObject(raw, 'SiteOne report');
   assertObject(raw.crawler, 'SiteOne crawler metadata');
   if (!Array.isArray(raw.summary?.items)) throw new Error('SiteOne report is missing summary.items');
@@ -44,12 +251,17 @@ function normalizeSiteOne(raw) {
       })).sort((a, b) => String(a.code).localeCompare(String(b.code)))
     : [];
 
-  const observations = raw.summary.items.map((item) => ({
-    source: 'siteone',
-    code: item.aplCode ?? null,
-    sourceStatus: item.status ?? null,
-    message: item.text ?? null,
-  })).sort((a, b) => `${a.sourceStatus}:${a.code}`.localeCompare(`${b.sourceStatus}:${b.code}`));
+  const observations = raw.summary.items.map((item) => {
+    const observation = {
+      source: 'siteone',
+      code: item.aplCode ?? null,
+      sourceStatus: item.status ?? null,
+      message: item.text ?? null,
+    };
+    const facts = extractSiteOneFacts(raw, target, observation.code);
+    if (facts !== undefined) observation.facts = facts;
+    return observation;
+  }).sort((a, b) => `${a.sourceStatus}:${a.code}`.localeCompare(`${b.sourceStatus}:${b.code}`));
 
   return {
     tool: 'SiteOne Crawler',
@@ -96,30 +308,19 @@ function normalizeLighthouse(raw) {
   };
 }
 
-// Evidence schema versioning decision (Baseline 0.3):
-//   `schemaVersion` identifies the major, potentially-breaking evidence shape
-//   ("ldw.website-quality.v1") and is unchanged from Baseline 0.1/0.2 because no
-//   existing field was removed, renamed, or given new meaning.
-//   `schemaMinorVersion` is a separate, purely additive counter. It starts at 0
-//   for the original Baseline 0.1/0.2 shape (implicit) and increments to 1 for
-//   Baseline 0.3's addition of `siteId`. Consumers that do not recognize
-//   `schemaMinorVersion` can safely ignore it; consumers that need the new
-//   field should check `schemaMinorVersion >= 1` rather than parsing
-//   `schemaVersion` as a compound string. A future breaking change must bump
-//   `schemaVersion` (e.g. `.v2`) and reset `schemaMinorVersion`, not overload
-//   the minor counter.
+// Evidence schema versioning decision:
+// `schemaVersion` remains the v1 major contract. Minor 2 adds only bounded,
+// optional typed SiteOne facts; downstream consumers must opt into minor 2
+// semantics deliberately. Historical minor-1 artifacts are not rewritten.
 const SCHEMA_VERSION = 'ldw.website-quality.v1';
-const SCHEMA_MINOR_VERSION = 1;
+const SCHEMA_MINOR_VERSION = 2;
 
 export function normalizeEvidence({ siteId, target, siteone, lighthouse }) {
-  // Syntax-only check against the shared opaque site-ID pattern. This keeps
-  // normalized machine identity consistent with the target-registry contract
-  // without making the normalizer read the registry itself.
   if (typeof siteId !== 'string' || !SITE_ID_PATTERN.test(siteId)) {
     throw new Error('siteId must be a valid opaque site identifier matching ^[a-z0-9][a-z0-9-]{0,63}$');
   }
 
-  const siteoneNormalized = normalizeSiteOne(siteone);
+  const siteoneNormalized = normalizeSiteOne(siteone, target);
   const lighthouseNormalized = normalizeLighthouse(lighthouse);
   return {
     schemaVersion: SCHEMA_VERSION,
