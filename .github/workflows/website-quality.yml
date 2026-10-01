@@ -41,6 +41,7 @@ jobs:
       - name: Validate scripts, target allowlist, and normalization fixtures
         run: |
           bash -n scripts/*.sh
+          node --check scripts/collect-compression.mjs
           node --check scripts/normalize.mjs
           node --check scripts/write-summary.mjs
           node --check scripts/resolve-target.mjs
@@ -77,6 +78,14 @@ jobs:
       - name: Collect raw SiteOne evidence
         run: bash scripts/run-siteone.sh artifacts/raw/siteone.json
 
+      - name: Collect raw compression delivery evidence
+        run: |
+          TARGET="$(bash scripts/resolve-target.sh "$WQT_SITE_ID")"
+          node scripts/collect-compression.mjs \
+            --target "$TARGET" \
+            --siteone artifacts/raw/siteone.json \
+            --output artifacts/raw/compression.json
+
       - name: Collect raw Lighthouse evidence
         run: bash scripts/run-lighthouse.sh artifacts/raw/lighthouse.json
 
@@ -88,6 +97,7 @@ jobs:
             --target "$TARGET" \
             --siteone artifacts/raw/siteone.json \
             --lighthouse artifacts/raw/lighthouse.json \
+            --compression artifacts/raw/compression.json \
             --output artifacts/normalized/website-quality.json
 
       - name: Write concise evidence summary
