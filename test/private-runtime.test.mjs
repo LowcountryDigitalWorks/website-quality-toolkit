@@ -112,7 +112,7 @@ test('public registry remains limited to the two accepted public targets', () =>
 });
 
 test('scanner core is library-only and refuses direct execution', () => {
-  const result = spawnSync('bash', [scannerCore], { encoding: 'utf8' });
+  const result = spawnSync(scannerCore, [], { encoding: 'utf8' });
   assert.equal(result.status, 2);
   assert.equal(result.stdout, '');
   assert.match(result.stderr, /library-only module/);
