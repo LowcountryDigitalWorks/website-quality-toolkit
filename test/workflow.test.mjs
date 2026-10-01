@@ -81,3 +81,19 @@ test('the workflow does not introduce any secrets', () => {
   assert.doesNotMatch(workflow, /\bsecrets\.[A-Za-z0-9_]+/, 'no ${{ secrets.* }} reference is authorized');
   assert.doesNotMatch(workflow, /^\s*secrets:\s*$/m, 'no top-level "secrets:" block is authorized');
 });
+
+
+test('the gated scan job collects compression evidence from the registered target and normalizes it', () => {
+  const scanBlock = extractBlock(/^\s{2}scan:\s*$/);
+  assert.match(scanBlock, /Collect raw compression delivery evidence/);
+  assert.match(scanBlock, /node scripts\/collect-compression\.mjs/);
+  assert.match(scanBlock, /--siteone artifacts\/raw\/siteone\.json/);
+  assert.match(scanBlock, /--output artifacts\/raw\/compression\.json/);
+  assert.match(scanBlock, /--compression artifacts\/raw\/compression\.json/);
+  assert.match(scanBlock, /resolve-target\.sh.*WQT_SITE_ID/);
+});
+
+test('validation syntax-checks the compression probe', () => {
+  const validateBlock = extractBlock(/^\s{2}validate:\s*$/);
+  assert.match(validateBlock, /node --check scripts\/collect-compression\.mjs/);
+});
