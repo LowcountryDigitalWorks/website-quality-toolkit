@@ -185,3 +185,61 @@ test('older schema minors ignore minor-3 skipped URL facts', () => {
   assert.match(output, /- Source statuses: CRITICAL: 1/);
   assert.doesNotMatch(output, /- Skipped URL context:/);
 });
+
+
+test('minor 4 renders provider-neutral compression delivery context without applying a threshold', () => {
+  const data = structuredClone(baseValidData);
+  data.schemaMinorVersion = 4;
+  data.sources.compression = {
+    tool: 'LDW Compression Probe',
+    version: '1',
+    requestedAcceptEncoding: 'zstd, br, gzip',
+    observations: [{
+      source: 'compression',
+      code: 'delivery-encoding',
+      facts: [
+        { id: 'brotli-response-count', valueType: 'number', value: 2, unit: 'count' },
+        { id: 'compressible-sample-count', valueType: 'number', value: 10, unit: 'count' },
+        { id: 'compression-sample-count', valueType: 'number', value: 12, unit: 'count' },
+        { id: 'gzip-response-count', valueType: 'number', value: 1, unit: 'count' },
+        { id: 'non-200-response-count', valueType: 'number', value: 1, unit: 'count' },
+        { id: 'unencoded-response-count', valueType: 'number', value: 1, unit: 'count' },
+        { id: 'unknown-encoding-response-count', valueType: 'number', value: 1, unit: 'count' },
+        { id: 'zstd-response-count', valueType: 'number', value: 5, unit: 'count' },
+      ],
+    }],
+  };
+
+  const output = renderSummary(data);
+  assert.match(output, /## Compression Delivery/);
+  assert.match(output, /Requested Accept-Encoding: `zstd, br, gzip`/);
+  assert.match(output, /10 compressible candidate\(s\) across 12 same-origin sample\(s\)/);
+  assert.match(output, /zstd 5; br 2; gzip 1; none 1; unknown 1; non-200 1/);
+  assert.match(output, /No compression threshold or provider-specific policy is applied/);
+});
+
+test('older schema minors ignore the additive compression source', () => {
+  const data = structuredClone(baseValidData);
+  data.schemaMinorVersion = 3;
+  data.sources.compression = {
+    requestedAcceptEncoding: 'zstd, br, gzip',
+    observations: [{
+      source: 'compression',
+      code: 'delivery-encoding',
+      facts: [
+        { id: 'brotli-response-count', valueType: 'number', value: 0, unit: 'count' },
+        { id: 'compressible-sample-count', valueType: 'number', value: 1, unit: 'count' },
+        { id: 'compression-sample-count', valueType: 'number', value: 1, unit: 'count' },
+        { id: 'gzip-response-count', valueType: 'number', value: 0, unit: 'count' },
+        { id: 'non-200-response-count', valueType: 'number', value: 0, unit: 'count' },
+        { id: 'unencoded-response-count', valueType: 'number', value: 0, unit: 'count' },
+        { id: 'unknown-encoding-response-count', valueType: 'number', value: 0, unit: 'count' },
+        { id: 'zstd-response-count', valueType: 'number', value: 1, unit: 'count' },
+      ],
+    }],
+  };
+
+  const output = renderSummary(data);
+  assert.doesNotMatch(output, /## Compression Delivery/);
+  assert.doesNotMatch(output, /Requested Accept-Encoding/);
+});
