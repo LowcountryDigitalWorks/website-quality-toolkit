@@ -27,6 +27,30 @@ export function renderSummary(data) {
     .map((item) => `${item.title ?? item.id}: ${formatScore(item.score)}`)
     .join(', ') || 'none';
 
+  let skippedContext = null;
+  const skippedObservation = (siteone.observations ?? []).find((item) => item.code === 'skipped');
+  const supportsSkippedContext = Number.isSafeInteger(data.schemaMinorVersion)
+    && data.schemaMinorVersion >= 3;
+  if (supportsSkippedContext && skippedObservation && Array.isArray(skippedObservation.facts)) {
+    const values = new Map(
+      skippedObservation.facts
+        .filter((fact) => fact?.valueType === 'number' && Number.isSafeInteger(fact.value))
+        .map((fact) => [fact.id, fact.value]),
+    );
+    const total = values.get('skipped-url-count');
+    const externalNotAllowed = values.get('external-not-allowed-host-count');
+    const internal = values.get('internal-skipped-url-count');
+    const other = values.get('other-skipped-url-count');
+
+    if ([total, externalNotAllowed, internal, other].every(Number.isSafeInteger)) {
+      if (total > 0 && externalNotAllowed === total && internal === 0 && other === 0) {
+        skippedContext = `${externalNotAllowed} external-host URL(s) intentionally skipped by the same-host crawl policy; no internal or other skipped URLs`;
+      } else {
+        skippedContext = `${total} total; ${externalNotAllowed} external-host Not allowed host; ${internal} internal; ${other} other`;
+      }
+    }
+  }
+
   return [
     '# Website Quality Evidence Summary',
     '',
@@ -40,6 +64,7 @@ export function renderSummary(data) {
     `- Version: \`${siteone.version ?? 'unknown'}\``,
     `- Overall source score: ${siteone.overallScore ?? 'n/a'} (recorded as scanner evidence, not an LDW gate)`,
     `- Source statuses: ${statusText}`,
+    ...(skippedContext ? [`- Skipped URL context: ${skippedContext}`] : []),
     '',
     '## Lighthouse',
     '',
