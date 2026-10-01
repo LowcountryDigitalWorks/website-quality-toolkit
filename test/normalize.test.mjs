@@ -44,7 +44,7 @@ function assertNoForbiddenRawKeys(value) {
 test('normalizes evidence without creating LDW quality thresholds', () => {
   const result = normalizeEvidence({ siteId: 'example-site', target: 'https://example.test', siteone, lighthouse });
   assert.equal(result.schemaVersion, 'ldw.website-quality.v1');
-  assert.equal(result.schemaMinorVersion, 2);
+  assert.equal(result.schemaMinorVersion, 3);
   assert.equal(result.siteId, 'example-site');
   assert.equal(result.evidenceOnly, true);
   assert.deepEqual(result.gatePolicy, { qualityThresholdsApplied: false, siteOneCiModeEnabled: false });
@@ -66,7 +66,7 @@ test('preserves the exact historical minor1 fixture while current output advance
   historicalShape.schemaMinorVersion = 1;
   assert.deepEqual(historicalShape, historicalMinor1);
   assert.equal(historicalMinor1.schemaMinorVersion, 1);
-  assert.equal(current.schemaMinorVersion, 2);
+  assert.equal(current.schemaMinorVersion, 3);
 });
 
 test('rejects a missing, blank, or syntactically invalid siteId', () => {
@@ -334,6 +334,97 @@ test('valid non-qualifying SiteOne results remain ordinary cache-fact filters', 
 
   const result = normalize(input);
   assert.equal(factValue(result, 'static-assets-short-cache', 'affected-resource-count'), 0);
+});
+
+test('derives skipped URL context from structured rows while preserving SiteOne source status', () => {
+  const input = clone(siteoneFacts);
+  input.summary.items.push({
+    aplCode: 'skipped',
+    status: 'CRITICAL',
+    text: 'display wording only: skipped URLs',
+  });
+  input.tables.skipped = {
+    rows: [
+      {
+        reason: 'Not allowed host',
+        url: 'https://docs.example.net/reference',
+        sourceAttr: '<a href>',
+        sourceUqId: '/',
+      },
+      {
+        reason: 'Robots.txt',
+        url: '/private/',
+        sourceAttr: '<a href>',
+        sourceUqId: '/',
+      },
+      {
+        reason: 'Exceeds max depth',
+        url: 'https://other.example.org/deep',
+        sourceAttr: '<a href>',
+        sourceUqId: '/docs/',
+      },
+    ],
+  };
+
+  const result = normalize(input);
+  const observation = siteOneObservation(result, 'skipped');
+  assert.equal(observation.sourceStatus, 'CRITICAL');
+  assert.deepEqual(observation.facts, [
+    { id: 'external-not-allowed-host-count', valueType: 'number', value: 1, unit: 'count' },
+    { id: 'internal-skipped-url-count', valueType: 'number', value: 1, unit: 'count' },
+    { id: 'other-skipped-url-count', valueType: 'number', value: 1, unit: 'count' },
+    { id: 'skipped-url-count', valueType: 'number', value: 3, unit: 'count' },
+  ]);
+});
+
+test('recognizes an all-external Not allowed host skipped set without changing the raw critical status', () => {
+  const input = clone(siteoneFacts);
+  input.summary.items.push({
+    aplCode: 'skipped',
+    status: 'CRITICAL',
+    text: 'wording deliberately unrelated to counts',
+  });
+  input.tables.skipped = {
+    rows: [
+      {
+        reason: 'Not allowed host',
+        url: 'https://developers.google.com/search',
+        sourceAttr: '<a href>',
+        sourceUqId: '/guides/',
+      },
+      {
+        reason: 'Not allowed host',
+        url: 'https://www.w3.org/WAI/',
+        sourceAttr: '<a href>',
+        sourceUqId: '/guides/',
+      },
+    ],
+  };
+
+  const result = normalize(input);
+  const observation = siteOneObservation(result, 'skipped');
+  assert.equal(observation.sourceStatus, 'CRITICAL');
+  assert.equal(factValue(result, 'skipped', 'external-not-allowed-host-count'), 2);
+  assert.equal(factValue(result, 'skipped', 'internal-skipped-url-count'), 0);
+  assert.equal(factValue(result, 'skipped', 'other-skipped-url-count'), 0);
+  assert.equal(factValue(result, 'skipped', 'skipped-url-count'), 2);
+});
+
+test('skipped URL facts fail closed when required structured rows are missing or malformed', () => {
+  const missingRows = clone(siteoneFacts);
+  missingRows.summary.items.push({ aplCode: 'skipped', status: 'CRITICAL', text: '999 skipped according to prose' });
+  missingRows.tables.skipped = {};
+  assert.throws(() => normalize(missingRows), /requires SiteOne tables\.skipped\.rows/);
+
+  const missingReason = clone(siteoneFacts);
+  missingReason.summary.items.push({ aplCode: 'skipped', status: 'CRITICAL', text: 'display wording' });
+  missingReason.tables.skipped = { rows: [{ url: 'https://docs.example.net/' }] };
+  assert.throws(() => normalize(missingReason), /skipped row\[0\]\.reason must be a string/);
+
+  const invalidUrl = clone(siteoneFacts);
+  invalidUrl.summary.items.push({ aplCode: 'skipped', status: 'CRITICAL', text: 'display wording' });
+  invalidUrl.tables.skipped = { rows: [{ reason: 'Not allowed host', url: 'http://[' }] };
+  assert.throws(() => normalize(invalidUrl), /skipped row\[0\]\.url must be a parseable URL/);
 });
 
 test('unrelated SiteOne observations omit facts', () => {
