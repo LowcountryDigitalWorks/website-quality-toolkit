@@ -51,6 +51,42 @@ export function renderSummary(data) {
     }
   }
 
+  let compressionContext = null;
+  const compression = data.sources?.compression;
+  const supportsCompressionContext = Number.isSafeInteger(data.schemaMinorVersion)
+    && data.schemaMinorVersion >= 4;
+  if (supportsCompressionContext && compression) {
+    const observation = (compression.observations ?? []).find((item) => item.code === 'delivery-encoding');
+    if (observation && Array.isArray(observation.facts)) {
+      const values = new Map(
+        observation.facts
+          .filter((fact) => fact?.valueType === 'number' && Number.isSafeInteger(fact.value))
+          .map((fact) => [fact.id, fact.value]),
+      );
+      const sampleCount = values.get('compression-sample-count');
+      const compressibleCount = values.get('compressible-sample-count');
+      const zstd = values.get('zstd-response-count');
+      const brotli = values.get('brotli-response-count');
+      const gzip = values.get('gzip-response-count');
+      const unencoded = values.get('unencoded-response-count');
+      const unknown = values.get('unknown-encoding-response-count');
+      const non200 = values.get('non-200-response-count');
+
+      if ([sampleCount, compressibleCount, zstd, brotli, gzip, unencoded, unknown, non200]
+        .every(Number.isSafeInteger)) {
+        compressionContext = [
+          `${compressibleCount} compressible candidate(s) across ${sampleCount} same-origin sample(s)`,
+          `zstd ${zstd}`,
+          `br ${brotli}`,
+          `gzip ${gzip}`,
+          `none ${unencoded}`,
+          `unknown ${unknown}`,
+          `non-200 ${non200}`,
+        ].join('; ');
+      }
+    }
+  }
+
   return [
     '# Website Quality Evidence Summary',
     '',
@@ -66,6 +102,14 @@ export function renderSummary(data) {
     `- Source statuses: ${statusText}`,
     ...(skippedContext ? [`- Skipped URL context: ${skippedContext}`] : []),
     '',
+    ...(compressionContext ? [
+      '## Compression Delivery',
+      '',
+      `- Requested Accept-Encoding: \`${compression.requestedAcceptEncoding ?? 'unknown'}\``,
+      `- Observed delivery evidence: ${compressionContext}`,
+      '- Evidence only. No compression threshold or provider-specific policy is applied.',
+      '',
+    ] : []),
     '## Lighthouse',
     '',
     `- Version: \`${lighthouse.version ?? 'unknown'}\``,
