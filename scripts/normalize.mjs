@@ -1,12 +1,13 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { ACCEPT_ENCODING, COMPRESSION_PROBE_SCHEMA, classifyContentEncoding, classifyResourceClass } from './collect-compression.mjs';
 import { SITE_ID_PATTERN } from './resolve-target.mjs';
 
 const FACT_ID_PATTERN = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const FACT_UNIT_PATTERN = /^[a-z][a-z0-9-]{0,31}$/;
 const FACT_VALUE_TYPES = new Set(['number', 'text', 'boolean']);
 const FACT_ALLOWED_KEYS = new Set(['id', 'valueType', 'value', 'unit']);
-const COUNT_FACT_IDS = new Set(['affected-resource-count', 'redirect-count', 'external-not-allowed-host-count', 'internal-skipped-url-count', 'other-skipped-url-count', 'skipped-url-count']);
+const COUNT_FACT_IDS = new Set(['affected-resource-count', 'redirect-count', 'external-not-allowed-host-count', 'internal-skipped-url-count', 'other-skipped-url-count', 'skipped-url-count', 'compression-sample-count', 'compressible-sample-count', 'zstd-response-count', 'brotli-response-count', 'gzip-response-count', 'unencoded-response-count', 'unknown-encoding-response-count', 'non-200-response-count']);
 const MAX_FACTS_PER_FINDING = 8;
 const MAX_TEXT_CODE_UNITS = 256;
 const SITEONE_CONTENT_TYPE_IDS = new Set([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
@@ -17,7 +18,7 @@ const CACHE_FLAG_NO_CACHE_HEADERS = 32768;
 const SHORT_CACHE_SECONDS = 86400;
 
 function usage() {
-  return 'Usage: node scripts/normalize.mjs --site-id <id> --target <url> --siteone <file> --lighthouse <file> --output <file>';
+  return 'Usage: node scripts/normalize.mjs --site-id <id> --target <url> --siteone <file> --lighthouse <file> --compression <file> --output <file>';
 }
 
 function parseArgs(argv) {
@@ -28,7 +29,7 @@ function parseArgs(argv) {
     if (!key?.startsWith('--') || value === undefined) throw new Error(usage());
     args[key.slice(2)] = value;
   }
-  for (const required of ['site-id', 'target', 'siteone', 'lighthouse', 'output']) {
+  for (const required of ['site-id', 'target', 'siteone', 'lighthouse', 'compression', 'output']) {
     if (!args[required]) throw new Error(`Missing --${required}. ${usage()}`);
   }
   return args;
@@ -381,21 +382,142 @@ function normalizeLighthouse(raw) {
   };
 }
 
+function normalizeCompression(raw, target) {
+  assertObject(raw, 'Compression probe report');
+  if (raw.schemaVersion !== COMPRESSION_PROBE_SCHEMA) {
+    throw new Error(`Compression probe has unsupported schemaVersion (expected ${COMPRESSION_PROBE_SCHEMA})`);
+  }
+
+  let targetOrigin;
+  try {
+    targetOrigin = new URL(target).origin;
+  } catch {
+    throw new Error('target must be an absolute URL');
+  }
+  if (raw.target !== targetOrigin) {
+    throw new Error('Compression probe target must exactly match normalized target origin');
+  }
+
+  assertObject(raw.request, 'Compression probe request metadata');
+  if (raw.request.acceptEncoding !== ACCEPT_ENCODING) {
+    throw new Error(`Compression probe request.acceptEncoding must equal "${ACCEPT_ENCODING}"`);
+  }
+  if (raw.request.redirectPolicy !== 'manual') {
+    throw new Error('Compression probe request.redirectPolicy must equal "manual"');
+  }
+  if (typeof raw.request.userAgent !== 'string' || raw.request.userAgent.length === 0) {
+    throw new Error('Compression probe request.userAgent must be a non-empty string');
+  }
+  if (!Array.isArray(raw.samples)) throw new Error('Compression probe samples must be an array');
+  if (raw.samples.length > 64) throw new Error('Compression probe samples exceed bounded maximum of 64');
+
+  const seenUrls = new Set();
+  let compressibleSampleCount = 0;
+  let zstdResponseCount = 0;
+  let brotliResponseCount = 0;
+  let gzipResponseCount = 0;
+  let unencodedResponseCount = 0;
+  let unknownEncodingResponseCount = 0;
+  let non200ResponseCount = 0;
+
+  for (const [index, sample] of raw.samples.entries()) {
+    if (!isPlainObject(sample)) throw new Error(`Compression sample[${index}] must be a JSON object`);
+    if (typeof sample.url !== 'string') throw new Error(`Compression sample[${index}].url must be a string`);
+
+    let parsed;
+    try {
+      parsed = new URL(sample.url);
+    } catch {
+      throw new Error(`Compression sample[${index}].url must be an absolute URL`);
+    }
+    if (parsed.protocol !== 'https:' || parsed.origin !== targetOrigin || parsed.username || parsed.password) {
+      throw new Error(`Compression sample[${index}].url must remain on the exact normalized target origin`);
+    }
+    if (seenUrls.has(parsed.href)) throw new Error(`Compression sample[${index}].url is duplicated`);
+    seenUrls.add(parsed.href);
+
+    if (!Number.isSafeInteger(sample.statusCode) || sample.statusCode < 100 || sample.statusCode > 599) {
+      throw new Error(`Compression sample[${index}].statusCode must be an integer from 100 through 599`);
+    }
+    if (sample.contentEncoding !== null && typeof sample.contentEncoding !== 'string') {
+      throw new Error(`Compression sample[${index}].contentEncoding must be a string or null`);
+    }
+    if (sample.contentType !== null && typeof sample.contentType !== 'string') {
+      throw new Error(`Compression sample[${index}].contentType must be a string or null`);
+    }
+    if (sample.contentLength !== null) {
+      assertNonNegativeSafeInteger(sample.contentLength, `Compression sample[${index}].contentLength`);
+    }
+
+    const encodingClass = classifyContentEncoding(sample.contentEncoding);
+    const resourceClass = classifyResourceClass(sample.contentType);
+    if (sample.encodingClass !== encodingClass) {
+      throw new Error(`Compression sample[${index}].encodingClass does not match contentEncoding`);
+    }
+    if (sample.resourceClass !== resourceClass) {
+      throw new Error(`Compression sample[${index}].resourceClass does not match contentType`);
+    }
+
+    if (sample.statusCode !== 200) {
+      non200ResponseCount += 1;
+      continue;
+    }
+    if (resourceClass !== 'compressible') continue;
+
+    compressibleSampleCount += 1;
+    if (encodingClass === 'zstd') zstdResponseCount += 1;
+    else if (encodingClass === 'br') brotliResponseCount += 1;
+    else if (encodingClass === 'gzip') gzipResponseCount += 1;
+    else if (encodingClass === 'none') unencodedResponseCount += 1;
+    else unknownEncodingResponseCount += 1;
+  }
+
+  const facts = validateFacts([
+    { id: 'brotli-response-count', valueType: 'number', value: brotliResponseCount, unit: 'count' },
+    { id: 'compressible-sample-count', valueType: 'number', value: compressibleSampleCount, unit: 'count' },
+    { id: 'compression-sample-count', valueType: 'number', value: raw.samples.length, unit: 'count' },
+    { id: 'gzip-response-count', valueType: 'number', value: gzipResponseCount, unit: 'count' },
+    { id: 'non-200-response-count', valueType: 'number', value: non200ResponseCount, unit: 'count' },
+    { id: 'unencoded-response-count', valueType: 'number', value: unencodedResponseCount, unit: 'count' },
+    { id: 'unknown-encoding-response-count', valueType: 'number', value: unknownEncodingResponseCount, unit: 'count' },
+    { id: 'zstd-response-count', valueType: 'number', value: zstdResponseCount, unit: 'count' },
+  ]);
+
+  return {
+    tool: 'LDW Compression Probe',
+    version: '1',
+    executedAt: typeof raw.executedAt === 'string' ? raw.executedAt : null,
+    requestedAcceptEncoding: raw.request.acceptEncoding,
+    observations: [{
+      source: 'compression',
+      code: 'delivery-encoding',
+      facts,
+    }],
+  };
+}
+
 // Evidence schema versioning decision:
 // `schemaVersion` remains the v1 major contract. Minor 2 adds only bounded,
-// optional typed SiteOne facts; minor 3 adds bounded skipped-URL context while
-// preserving every existing field and source status. Historical artifacts are
-// not rewritten.
+// optional typed SiteOne facts; minor 3 adds bounded skipped-URL context; minor 4
+// adds an optional provider-neutral compression-delivery evidence source. Existing
+// fields and source statuses remain unchanged, and historical artifacts are not rewritten.
 const SCHEMA_VERSION = 'ldw.website-quality.v1';
-const SCHEMA_MINOR_VERSION = 3;
+const SCHEMA_MINOR_VERSION = 4;
 
-export function normalizeEvidence({ siteId, target, siteone, lighthouse }) {
+export function normalizeEvidence({ siteId, target, siteone, lighthouse, compression = undefined }) {
   if (typeof siteId !== 'string' || !SITE_ID_PATTERN.test(siteId)) {
     throw new Error('siteId must be a valid opaque site identifier matching ^[a-z0-9][a-z0-9-]{0,63}$');
   }
 
   const siteoneNormalized = normalizeSiteOne(siteone, target);
   const lighthouseNormalized = normalizeLighthouse(lighthouse);
+  const compressionNormalized = compression === undefined ? undefined : normalizeCompression(compression, target);
+  const sources = {
+    siteone: siteoneNormalized,
+    lighthouse: lighthouseNormalized,
+    ...(compressionNormalized ? { compression: compressionNormalized } : {}),
+  };
+  const compressionObservations = compressionNormalized?.observations ?? [];
   return {
     schemaVersion: SCHEMA_VERSION,
     schemaMinorVersion: SCHEMA_MINOR_VERSION,
@@ -406,11 +528,8 @@ export function normalizeEvidence({ siteId, target, siteone, lighthouse }) {
       qualityThresholdsApplied: false,
       siteOneCiModeEnabled: false,
     },
-    sources: {
-      siteone: siteoneNormalized,
-      lighthouse: lighthouseNormalized,
-    },
-    observations: [...siteoneNormalized.observations, ...lighthouseNormalized.observations]
+    sources,
+    observations: [...siteoneNormalized.observations, ...lighthouseNormalized.observations, ...compressionObservations]
       .sort((a, b) => `${a.source}:${a.code}`.localeCompare(`${b.source}:${b.code}`)),
   };
 }
@@ -423,6 +542,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
       target: args.target,
       siteone: readJson(args.siteone),
       lighthouse: readJson(args.lighthouse),
+      compression: readJson(args.compression),
     });
     fs.mkdirSync(path.dirname(args.output), { recursive: true });
     fs.writeFileSync(args.output, `${JSON.stringify(normalized, null, 2)}\n`);
