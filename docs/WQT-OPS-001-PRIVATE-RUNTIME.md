@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This document defines the reusable public-repository boundary for WQT-OPS-001. It allows a trusted private or customer-owned runtime to resolve an authorized private target and then reuse the same SiteOne/Lighthouse execution implementation as the public workflow without adding customer configuration or evidence to puc WQT.
+This document defines the reusable public-repository boundary for WQT-OPS-001. It allows a trusted private or customer-owned runtime to resolve an authorized private target and then reuse the same SiteOne/Lighthouse execution implementation as the public workflow without adding customer configuration or evidence to public WQT.
 
 This is an implementation boundary only. It does not authorize customer enrollment, private production deployment, recurring scan activation, or any SuiteDash/Activepieces mutation.
 
