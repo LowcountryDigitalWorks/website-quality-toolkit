@@ -10,8 +10,8 @@ if (args.length !== 2) {
   try {
     const origin = resolveTarget(siteIdentifier, registryPath);
     process.stdout.write(`${origin}\n`);
-  } catch (error) {
-    process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
+  } catch {
+    process.stderr.write('Private target resolution failed.\n');
     process.exitCode = 2;
   }
 }
