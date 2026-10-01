@@ -51,7 +51,7 @@ The dedicated LDW SEO / website-quality workstream remains authoritative for thi
 
 ## Project-local browser and accessibility boundary
 
-Website-specific browser regression and detailed accessibility tests remain with each website repository when that project already owns them. Baseline 0.2 does not move or duplicate those project-local suites.
+Website-specific browser regression and detailed accessibility tests remain with each website repository when that project already owns them. Baseline 0.3 does not move or duplicate those project-local suites.
 
 ## Boundaries
 
