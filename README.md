@@ -21,6 +21,7 @@ The current architecture remains intentionally narrow:
 
 - SiteOne Crawler `2.5.1` for whole-site evidence;
 - Lighthouse `13.4.1` for focused homepage lab evidence;
+- a bounded provider-neutral compression-delivery probe over SiteOne-discovered same-origin URLs;
 - GitHub Actions for pull-request validation, explicit manual execution, summaries, and temporary artifacts;
 - a thin versioned `ldw.website-quality.v1` JSON normalizer (now including `schemaMinorVersion` and `siteId`) that preserves source evidence without implementing scanner logic.
 
@@ -81,6 +82,7 @@ npm ci --ignore-scripts --no-audit --no-fund
 npm test
 bash -n scripts/*.sh
 node --check scripts/resolve-target.mjs
+node --check scripts/collect-compression.mjs
 node --check scripts/normalize.mjs
 node --check scripts/write-summary.mjs
 ```
