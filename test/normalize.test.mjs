@@ -410,6 +410,43 @@ test('recognizes an all-external Not allowed host skipped set without changing t
   assert.equal(factValue(result, 'skipped', 'skipped-url-count'), 2);
 });
 
+test('hostless and non-http Not allowed host rows count as other, not intentional external hosts', () => {
+  const input = clone(siteoneFacts);
+  input.summary.items.push({
+    aplCode: 'skipped',
+    status: 'CRITICAL',
+    text: 'display wording only',
+  });
+  input.tables.skipped = {
+    rows: [
+      {
+        reason: 'Not allowed host',
+        url: 'mailto:user@example.com',
+        sourceAttr: '<a href>',
+        sourceUqId: '/',
+      },
+      {
+        reason: 'Not allowed host',
+        url: 'javascript:void(0)',
+        sourceAttr: '<a href>',
+        sourceUqId: '/',
+      },
+      {
+        reason: 'Not allowed host',
+        url: 'https://docs.example.net/reference',
+        sourceAttr: '<a href>',
+        sourceUqId: '/',
+      },
+    ],
+  };
+
+  const result = normalize(input);
+  assert.equal(factValue(result, 'skipped', 'external-not-allowed-host-count'), 1);
+  assert.equal(factValue(result, 'skipped', 'internal-skipped-url-count'), 0);
+  assert.equal(factValue(result, 'skipped', 'other-skipped-url-count'), 2);
+  assert.equal(factValue(result, 'skipped', 'skipped-url-count'), 3);
+});
+
 test('skipped URL facts fail closed when required structured rows are missing or malformed', () => {
   const missingRows = clone(siteoneFacts);
   missingRows.summary.items.push({ aplCode: 'skipped', status: 'CRITICAL', text: '999 skipped according to prose' });
