@@ -24,6 +24,88 @@ function siteOneObservation(result, code) {
   return result.sources.siteone.observations.find((item) => item.code === code);
 }
 
+function compressionObservation(result) {
+  return result.sources.compression?.observations?.find((item) => item.code === 'delivery-encoding');
+}
+
+function compressionFixture() {
+  return {
+    schemaVersion: 'ldw.wqt-compression-probe.v1',
+    executedAt: '2026-10-01T00:00:00.000Z',
+    target: 'https://example.test',
+    request: {
+      acceptEncoding: 'zstd, br, gzip',
+      userAgent: 'LDW-Website-Quality-Compression-Probe/1.0',
+      redirectPolicy: 'manual',
+    },
+    samples: [
+      {
+        url: 'https://example.test/',
+        statusCode: 200,
+        contentEncoding: 'zstd',
+        encodingClass: 'zstd',
+        contentType: 'text/html; charset=utf-8',
+        resourceClass: 'compressible',
+        contentLength: null,
+      },
+      {
+        url: 'https://example.test/site.css',
+        statusCode: 200,
+        contentEncoding: 'br',
+        encodingClass: 'br',
+        contentType: 'text/css',
+        resourceClass: 'compressible',
+        contentLength: 500,
+      },
+      {
+        url: 'https://example.test/app.js',
+        statusCode: 200,
+        contentEncoding: 'gzip',
+        encodingClass: 'gzip',
+        contentType: 'application/javascript',
+        resourceClass: 'compressible',
+        contentLength: 1000,
+      },
+      {
+        url: 'https://example.test/plain.txt',
+        statusCode: 200,
+        contentEncoding: null,
+        encodingClass: 'none',
+        contentType: 'text/plain',
+        resourceClass: 'compressible',
+        contentLength: 20,
+      },
+      {
+        url: 'https://example.test/data.json',
+        statusCode: 200,
+        contentEncoding: 'deflate',
+        encodingClass: 'unknown',
+        contentType: 'application/json',
+        resourceClass: 'compressible',
+        contentLength: 200,
+      },
+      {
+        url: 'https://example.test/image.png',
+        statusCode: 200,
+        contentEncoding: null,
+        encodingClass: 'none',
+        contentType: 'image/png',
+        resourceClass: 'non-compressible',
+        contentLength: 300,
+      },
+      {
+        url: 'https://example.test/unavailable',
+        statusCode: 503,
+        contentEncoding: 'gzip',
+        encodingClass: 'gzip',
+        contentType: 'text/html',
+        resourceClass: 'compressible',
+        contentLength: 50,
+      },
+    ],
+  };
+}
+
 function factValue(result, code, id) {
   const observation = siteOneObservation(result, code);
   return observation?.facts?.find((fact) => fact.id === id)?.value;
@@ -44,7 +126,7 @@ function assertNoForbiddenRawKeys(value) {
 test('normalizes evidence without creating LDW quality thresholds', () => {
   const result = normalizeEvidence({ siteId: 'example-site', target: 'https://example.test', siteone, lighthouse });
   assert.equal(result.schemaVersion, 'ldw.website-quality.v1');
-  assert.equal(result.schemaMinorVersion, 3);
+  assert.equal(result.schemaMinorVersion, 4);
   assert.equal(result.siteId, 'example-site');
   assert.equal(result.evidenceOnly, true);
   assert.deepEqual(result.gatePolicy, { qualityThresholdsApplied: false, siteOneCiModeEnabled: false });
@@ -66,7 +148,7 @@ test('preserves the exact historical minor1 fixture while current output advance
   historicalShape.schemaMinorVersion = 1;
   assert.deepEqual(historicalShape, historicalMinor1);
   assert.equal(historicalMinor1.schemaMinorVersion, 1);
-  assert.equal(current.schemaMinorVersion, 3);
+  assert.equal(current.schemaMinorVersion, 4);
 });
 
 test('rejects a missing, blank, or syntactically invalid siteId', () => {
@@ -462,6 +544,72 @@ test('skipped URL facts fail closed when required structured rows are missing or
   invalidUrl.summary.items.push({ aplCode: 'skipped', status: 'CRITICAL', text: 'display wording' });
   invalidUrl.tables.skipped = { rows: [{ reason: 'Not allowed host', url: 'http://[' }] };
   assert.throws(() => normalize(invalidUrl), /skipped row\[0\]\.url must be a parseable URL/);
+});
+
+test('normalizes provider-neutral compression delivery evidence without creating a quality threshold', () => {
+  const result = normalizeEvidence({
+    siteId: 'example-site',
+    target: 'https://example.test',
+    siteone,
+    lighthouse,
+    compression: compressionFixture(),
+  });
+
+  assert.equal(result.schemaMinorVersion, 4);
+  assert.equal(result.sources.compression.tool, 'LDW Compression Probe');
+  assert.equal(result.sources.compression.requestedAcceptEncoding, 'zstd, br, gzip');
+  assert.deepEqual(compressionObservation(result).facts, [
+    { id: 'brotli-response-count', valueType: 'number', value: 1, unit: 'count' },
+    { id: 'compressible-sample-count', valueType: 'number', value: 5, unit: 'count' },
+    { id: 'compression-sample-count', valueType: 'number', value: 7, unit: 'count' },
+    { id: 'gzip-response-count', valueType: 'number', value: 1, unit: 'count' },
+    { id: 'non-200-response-count', valueType: 'number', value: 1, unit: 'count' },
+    { id: 'unencoded-response-count', valueType: 'number', value: 1, unit: 'count' },
+    { id: 'unknown-encoding-response-count', valueType: 'number', value: 1, unit: 'count' },
+    { id: 'zstd-response-count', valueType: 'number', value: 1, unit: 'count' },
+  ]);
+  assert.equal(result.gatePolicy.qualityThresholdsApplied, false);
+});
+
+test('compression normalization fails closed on target escape and contradictory classifications', () => {
+  const offOrigin = compressionFixture();
+  offOrigin.samples[0].url = 'https://other.example/';
+  assert.throws(
+    () => normalizeEvidence({
+      siteId: 'example-site',
+      target: 'https://example.test',
+      siteone,
+      lighthouse,
+      compression: offOrigin,
+    }),
+    /exact normalized target origin/,
+  );
+
+  const contradictory = compressionFixture();
+  contradictory.samples[0].encodingClass = 'gzip';
+  assert.throws(
+    () => normalizeEvidence({
+      siteId: 'example-site',
+      target: 'https://example.test',
+      siteone,
+      lighthouse,
+      compression: contradictory,
+    }),
+    /encodingClass does not match contentEncoding/,
+  );
+
+  const wrongMinorSource = compressionFixture();
+  wrongMinorSource.schemaVersion = 'ldw.wqt-compression-probe.v2';
+  assert.throws(
+    () => normalizeEvidence({
+      siteId: 'example-site',
+      target: 'https://example.test',
+      siteone,
+      lighthouse,
+      compression: wrongMinorSource,
+    }),
+    /unsupported schemaVersion/,
+  );
 });
 
 test('unrelated SiteOne observations omit facts', () => {
