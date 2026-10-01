@@ -6,7 +6,7 @@ const FACT_ID_PATTERN = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const FACT_UNIT_PATTERN = /^[a-z][a-z0-9-]{0,31}$/;
 const FACT_VALUE_TYPES = new Set(['number', 'text', 'boolean']);
 const FACT_ALLOWED_KEYS = new Set(['id', 'valueType', 'value', 'unit']);
-const COUNT_FACT_IDS = new Set(['affected-resource-count', 'redirect-count']);
+const COUNT_FACT_IDS = new Set(['affected-resource-count', 'redirect-count', 'external-not-allowed-host-count', 'internal-skipped-url-count', 'other-skipped-url-count', 'skipped-url-count']);
 const MAX_FACTS_PER_FINDING = 8;
 const MAX_TEXT_CODE_UNITS = 256;
 const SITEONE_CONTENT_TYPE_IDS = new Set([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
@@ -231,9 +231,77 @@ function extractRedirectFacts(raw) {
   }]);
 }
 
+function extractSkippedFacts(raw, target) {
+  if (!isPlainObject(raw.tables)
+    || !isPlainObject(raw.tables.skipped)
+    || !Array.isArray(raw.tables.skipped.rows)) {
+    throw new Error('skipped requires SiteOne tables.skipped.rows[]');
+  }
+
+  const targetHostname = normalizedHostname(target, 'target');
+  let externalNotAllowedHostCount = 0;
+  let internalSkippedUrlCount = 0;
+  let otherSkippedUrlCount = 0;
+
+  for (const [index, row] of raw.tables.skipped.rows.entries()) {
+    if (!isPlainObject(row)) throw new Error(`skipped row[${index}] must be a JSON object`);
+    if (typeof row.reason !== 'string') throw new Error(`skipped row[${index}].reason must be a string`);
+    if (typeof row.url !== 'string') throw new Error(`skipped row[${index}].url must be a string`);
+
+    let parsed;
+    try {
+      parsed = new URL(row.url, target);
+    } catch {
+      throw new Error(`skipped row[${index}].url must be a parseable URL`);
+    }
+
+    const parsedHostname = parsed.hostname.startsWith('www.')
+      ? parsed.hostname.slice(4)
+      : parsed.hostname;
+    const isHttpUrl = parsed.protocol === 'http:' || parsed.protocol === 'https:';
+    const isInternal = isHttpUrl && parsedHostname === targetHostname;
+
+    if (isInternal) {
+      internalSkippedUrlCount += 1;
+    } else if (row.reason === 'Not allowed host') {
+      externalNotAllowedHostCount += 1;
+    } else {
+      otherSkippedUrlCount += 1;
+    }
+  }
+
+  return validateFacts([
+    {
+      id: 'external-not-allowed-host-count',
+      valueType: 'number',
+      value: externalNotAllowedHostCount,
+      unit: 'count',
+    },
+    {
+      id: 'internal-skipped-url-count',
+      valueType: 'number',
+      value: internalSkippedUrlCount,
+      unit: 'count',
+    },
+    {
+      id: 'other-skipped-url-count',
+      valueType: 'number',
+      value: otherSkippedUrlCount,
+      unit: 'count',
+    },
+    {
+      id: 'skipped-url-count',
+      valueType: 'number',
+      value: raw.tables.skipped.rows.length,
+      unit: 'count',
+    },
+  ]);
+}
+
 function extractSiteOneFacts(raw, target, code) {
   if (code === 'static-assets-short-cache') return extractStaticShortCacheFacts(raw, target);
   if (code === 'redirects') return extractRedirectFacts(raw);
+  if (code === 'skipped') return extractSkippedFacts(raw, target);
   return undefined;
 }
 
@@ -310,10 +378,11 @@ function normalizeLighthouse(raw) {
 
 // Evidence schema versioning decision:
 // `schemaVersion` remains the v1 major contract. Minor 2 adds only bounded,
-// optional typed SiteOne facts; downstream consumers must opt into minor 2
-// semantics deliberately. Historical minor-1 artifacts are not rewritten.
+// optional typed SiteOne facts; minor 3 adds bounded skipped-URL context while
+// preserving every existing field and source status. Historical artifacts are
+// not rewritten.
 const SCHEMA_VERSION = 'ldw.website-quality.v1';
-const SCHEMA_MINOR_VERSION = 2;
+const SCHEMA_MINOR_VERSION = 3;
 
 export function normalizeEvidence({ siteId, target, siteone, lighthouse }) {
   if (typeof siteId !== 'string' || !SITE_ID_PATTERN.test(siteId)) {
