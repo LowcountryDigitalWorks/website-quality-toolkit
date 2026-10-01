@@ -56,6 +56,17 @@ test('workflow_dispatch.inputs.site is a required string input with no default',
   assert.doesNotMatch(dispatchBlock, /^\s*default:/m, 'the "site" input must not set a default');
 });
 
+test('workflow_dispatch exposes only the opaque site input and no URL or registry path', () => {
+  const dispatchBlock = extractBlock(/^\s{2}workflow_dispatch:\s*$/);
+  const inputNames = dispatchBlock
+    .split('\n')
+    .filter((line) => /^\s{6}[A-Za-z0-9_-]+:\s*$/.test(line))
+    .map((line) => line.trim().replace(/:$/, ''));
+
+  assert.deepEqual(inputNames, ['site']);
+  assert.doesNotMatch(dispatchBlock, /^\s*(url|target|registry|registry_path|registry-path):\s*$/mi);
+});
+
 test('the scan (production evidence collection) job cannot run for pull_request events', () => {
   const scanBlock = extractBlock(/^\s{2}scan:\s*$/);
   assert.match(
@@ -80,4 +91,10 @@ test('every checkout step keeps persist-credentials: false', () => {
 test('the workflow does not introduce any secrets', () => {
   assert.doesNotMatch(workflow, /\bsecrets\.[A-Za-z0-9_]+/, 'no ${{ secrets.* }} reference is authorized');
   assert.doesNotMatch(workflow, /^\s*secrets:\s*$/m, 'no top-level "secrets:" block is authorized');
+});
+
+test('the public workflow cannot invoke the trusted private registry path', () => {
+  assert.doesNotMatch(workflow, /resolve-private-target/);
+  assert.doesNotMatch(workflow, /WQT_TARGET_REGISTRY/);
+  assert.doesNotMatch(workflow, /registry-path|registry_path/);
 });
