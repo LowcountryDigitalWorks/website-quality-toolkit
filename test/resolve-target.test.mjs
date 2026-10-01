@@ -8,6 +8,7 @@ import test from 'node:test';
 import { loadRegistry, resolveTarget, SITE_ID_PATTERN, TargetResolutionError } from '../scripts/resolve-target.mjs';
 
 const resolverScript = fileURLToPath(new URL('../scripts/resolve-target.sh', import.meta.url));
+const privateResolverScript = fileURLToPath(new URL('../scripts/resolve-private-target.mjs', import.meta.url));
 const fixture = (name) => fileURLToPath(new URL(`./fixtures/targets/${name}`, import.meta.url));
 
 // The production CLI never accepts a caller-controlled registry path (no
@@ -18,6 +19,17 @@ function runResolverCli(siteIdentifier) {
     encoding: 'utf8',
     env: { PATH: process.env.PATH ?? '' },
   });
+}
+
+function runPrivateResolverCli(registryPath, siteIdentifier, extraArgs = []) {
+  return spawnSync(
+    process.execPath,
+    [privateResolverScript, registryPath, siteIdentifier, ...extraArgs],
+    {
+      encoding: 'utf8',
+      env: { PATH: process.env.PATH ?? '' },
+    },
+  );
 }
 
 function writeTempRegistry(sites) {
@@ -57,6 +69,56 @@ test('blank, malformed, URL-shaped, and unknown identifiers fail closed', () => 
   for (const identifier of ['', ' donovanfamilydentistry', 'https://example.com', 'future-site']) {
     const result = runResolverCli(identifier);
     assert.equal(result.status, 2, `expected ${JSON.stringify(identifier)} to be rejected`);
+    assert.equal(result.stdout, '');
+    assert.notEqual(result.stderr, '');
+  }
+});
+
+test('trusted private resolver accepts a valid synthetic private registry and enabled opaque ID', () => {
+  const result = runPrivateResolverCli(fixture('valid.json'), 'example-one');
+  assert.equal(result.status, 0);
+  assert.equal(result.stdout, 'https://example-one.test\n');
+  assert.equal(result.stderr, '');
+});
+
+test('trusted private resolver requires exactly registry path plus opaque site ID', () => {
+  const cases = [
+    spawnSync(process.execPath, [privateResolverScript], { encoding: 'utf8' }),
+    spawnSync(process.execPath, [privateResolverScript, fixture('valid.json')], { encoding: 'utf8' }),
+    runPrivateResolverCli(fixture('valid.json'), 'example-one', ['extra']),
+  ];
+  for (const result of cases) {
+    assert.equal(result.status, 2);
+    assert.equal(result.stdout, '');
+    assert.match(result.stderr, /Usage:/);
+  }
+});
+
+test('trusted private resolver rejects direct URLs used where opaque site IDs are required', () => {
+  const result = runPrivateResolverCli(fixture('valid.json'), 'https://example-one.test');
+  assert.equal(result.status, 2);
+  assert.equal(result.stdout, '');
+  assert.match(result.stderr, /Unauthorized site identifier/);
+});
+
+test('trusted private resolver reuses the full fail-closed registry contract', () => {
+  const cases = [
+    [fixture('disabled.json'), 'example-retired'],
+    [fixture('duplicate-id.json'), 'example-one'],
+    [fixture('duplicate-origin.json'), 'example-one'],
+    [fixture('malformed-json.json'), 'example-one'],
+    [fixture('malformed-schema.json'), 'example-one'],
+    [fixture('unsafe.json'), 'example-insecure'],
+    [fixture('unexpected-root-field.json'), 'example-one'],
+    [fixture('unexpected-site-field.json'), 'example-one'],
+    [fixture('invalid-environment.json'), 'example-one'],
+    [fixture('does-not-exist.json'), 'example-one'],
+    [fixture('valid.json'), 'not-registered'],
+  ];
+
+  for (const [registryPath, siteIdentifier] of cases) {
+    const result = runPrivateResolverCli(registryPath, siteIdentifier);
+    assert.equal(result.status, 2, `expected ${registryPath} / ${siteIdentifier} to fail closed`);
     assert.equal(result.stdout, '');
     assert.notEqual(result.stderr, '');
   }

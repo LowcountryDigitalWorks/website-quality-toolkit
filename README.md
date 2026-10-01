@@ -26,6 +26,10 @@ The current architecture remains intentionally narrow:
 
 Baseline 0.3 details are documented in [`docs/BASELINE-0.3.md`](docs/BASELINE-0.3.md). The accepted Baseline 0.1 and 0.2 designs remain preserved as historical documentation in [`docs/BASELINE-0.1.md`](docs/BASELINE-0.1.md) and [`docs/BASELINE-0.2.md`](docs/BASELINE-0.2.md).
 
+### Trusted private-runtime boundary
+
+WQT-OPS-001 adds a separate trusted private-registry resolver and a library-only shared scanner core for future private/customer-owned execution. It does **not** add customer targets to the public registry, does not add a public registry-path/URL input, and does not deploy a private customer runner. The operating contract and boundaries are documented in [`docs/WQT-OPS-001-PRIVATE-RUNTIME.md`](docs/WQT-OPS-001-PRIVATE-RUNTIME.md).
+
 ### Evidence-first behavior
 
 Baseline 0.3 does **not** establish quality thresholds.
@@ -81,6 +85,7 @@ npm ci --ignore-scripts --no-audit --no-fund
 npm test
 bash -n scripts/*.sh
 node --check scripts/resolve-target.mjs
+node --check scripts/resolve-private-target.mjs
 node --check scripts/normalize.mjs
 node --check scripts/write-summary.mjs
 ```
