@@ -126,6 +126,7 @@ test('preserves fallback behavior for optional version, score, and status values
 
 test('preserves CRITICAL source status while explaining all-external intentional skip context', () => {
   const data = structuredClone(baseValidData);
+  data.schemaMinorVersion = 3;
   data.sources.siteone.observations = [{
     code: 'skipped',
     sourceStatus: 'CRITICAL',
@@ -147,6 +148,7 @@ test('preserves CRITICAL source status while explaining all-external intentional
 
 test('mixed skipped URL context remains explicit and is not summarized as all-intentional external skipping', () => {
   const data = structuredClone(baseValidData);
+  data.schemaMinorVersion = 3;
   data.sources.siteone.observations = [{
     code: 'skipped',
     sourceStatus: 'CRITICAL',
@@ -162,4 +164,24 @@ test('mixed skipped URL context remains explicit and is not summarized as all-in
   assert.match(output, /- Source statuses: CRITICAL: 1/);
   assert.match(output, /- Skipped URL context: 4 total; 2 external-host Not allowed host; 1 internal; 1 other/);
   assert.doesNotMatch(output, /no internal or other skipped URLs/);
+});
+
+
+test('older schema minors ignore minor-3 skipped URL facts', () => {
+  const data = structuredClone(baseValidData);
+  data.schemaMinorVersion = 2;
+  data.sources.siteone.observations = [{
+    code: 'skipped',
+    sourceStatus: 'CRITICAL',
+    facts: [
+      { id: 'external-not-allowed-host-count', valueType: 'number', value: 17, unit: 'count' },
+      { id: 'internal-skipped-url-count', valueType: 'number', value: 0, unit: 'count' },
+      { id: 'other-skipped-url-count', valueType: 'number', value: 0, unit: 'count' },
+      { id: 'skipped-url-count', valueType: 'number', value: 17, unit: 'count' },
+    ],
+  }];
+
+  const output = renderSummary(data);
+  assert.match(output, /- Source statuses: CRITICAL: 1/);
+  assert.doesNotMatch(output, /- Skipped URL context:/);
 });
