@@ -29,7 +29,9 @@ export function renderSummary(data) {
 
   let skippedContext = null;
   const skippedObservation = (siteone.observations ?? []).find((item) => item.code === 'skipped');
-  if (skippedObservation && Array.isArray(skippedObservation.facts)) {
+  const supportsSkippedContext = Number.isSafeInteger(data.schemaMinorVersion)
+    && data.schemaMinorVersion >= 3;
+  if (supportsSkippedContext && skippedObservation && Array.isArray(skippedObservation.facts)) {
     const values = new Map(
       skippedObservation.facts
         .filter((fact) => fact?.valueType === 'number' && Number.isSafeInteger(fact.value))
