@@ -259,11 +259,16 @@ function extractSkippedFacts(raw, target) {
       ? parsed.hostname.slice(4)
       : parsed.hostname;
     const isHttpUrl = parsed.protocol === 'http:' || parsed.protocol === 'https:';
-    const isInternal = isHttpUrl && parsedHostname === targetHostname;
+    const hasHostname = parsed.hostname.length > 0;
+    const isInternal = isHttpUrl && hasHostname && parsedHostname === targetHostname;
+    const isIntentionalExternalHost = isHttpUrl
+      && hasHostname
+      && !isInternal
+      && row.reason === 'Not allowed host';
 
     if (isInternal) {
       internalSkippedUrlCount += 1;
-    } else if (row.reason === 'Not allowed host') {
+    } else if (isIntentionalExternalHost) {
       externalNotAllowedHostCount += 1;
     } else {
       otherSkippedUrlCount += 1;
