@@ -12,14 +12,22 @@ const scannerCore = fs.readFileSync(scannerCorePath, 'utf8');
 const siteoneWrapper = fs.readFileSync(siteoneWrapperPath, 'utf8');
 const lighthouseWrapper = fs.readFileSync(lighthouseWrapperPath, 'utf8');
 
-test('scanner core refuses direct execution', () => {
-  const result = spawnSync('bash', [scannerCorePath], {
+test('scanner core refuses direct executable invocation before any scanner can run', () => {
+  const result = spawnSync(scannerCorePath, [], {
     encoding: 'utf8',
-    env: { PATH: process.env.PATH ?? '' },
+    env: {
+      PATH: process.env.PATH ?? '',
+      SITEONE_BIN: '/definitely-not-a-siteone-binary',
+      CHROME_PATH: '/definitely-not-a-chrome-binary',
+    },
   });
   assert.equal(result.status, 2);
   assert.equal(result.stdout, '');
-  assert.match(result.stderr, /library-only/);
+  assert.equal(
+    result.stderr,
+    'scanner-core.sh is library-only; resolve an authorized target before sourcing it.\n',
+  );
+  assert.doesNotMatch(result.stderr, /SiteOne|Lighthouse/);
 });
 
 test('public scanner wrappers retain fixed public authority resolution', () => {

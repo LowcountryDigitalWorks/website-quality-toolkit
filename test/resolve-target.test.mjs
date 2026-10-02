@@ -11,6 +11,8 @@ const resolverScript = fileURLToPath(new URL('../scripts/resolve-target.sh', imp
 const privateResolverScript = fileURLToPath(new URL('../scripts/resolve-private-target.mjs', import.meta.url));
 const fixture = (name) => fileURLToPath(new URL(`./fixtures/targets/${name}`, import.meta.url));
 
+const PRIVATE_RESOLUTION_FAILURE = 'Private target resolution failed.\n';
+
 // The production CLI never accepts a caller-controlled registry path (no
 // env var, no flag). It always resolves against the checked-in
 // config/targets.json, matching the exact production invocation contract.
@@ -30,6 +32,18 @@ function runPrivateResolverCli(registryPath, siteIdentifier, extraArgs = []) {
       env: { PATH: process.env.PATH ?? '' },
     },
   );
+}
+
+function assertPrivateResolverFailure(result, forbiddenValues = []) {
+  assert.equal(result.status, 2);
+  assert.equal(result.stdout, '');
+  assert.equal(result.stderr, PRIVATE_RESOLUTION_FAILURE);
+  for (const value of forbiddenValues) {
+    assert.ok(
+      !result.stderr.includes(value),
+      `private resolver stderr must not disclose ${JSON.stringify(value)}`,
+    );
+  }
 }
 
 function writeTempRegistry(sites) {
@@ -94,14 +108,13 @@ test('trusted private resolver requires exactly registry path plus opaque site I
   }
 });
 
-test('trusted private resolver rejects direct URLs used where opaque site IDs are required', () => {
-  const result = runPrivateResolverCli(fixture('valid.json'), 'https://example-one.test');
-  assert.equal(result.status, 2);
-  assert.equal(result.stdout, '');
-  assert.match(result.stderr, /Unauthorized site identifier/);
+test('trusted private resolver rejects direct URLs without disclosing the supplied value', () => {
+  const siteIdentifier = 'https://example-one.test';
+  const result = runPrivateResolverCli(fixture('valid.json'), siteIdentifier);
+  assertPrivateResolverFailure(result, [siteIdentifier, 'Unauthorized site identifier']);
 });
 
-test('trusted private resolver reuses the full fail-closed registry contract', () => {
+test('trusted private resolver reuses the full fail-closed registry contract with generic CLI failures', () => {
   const cases = [
     [fixture('disabled.json'), 'example-retired'],
     [fixture('duplicate-id.json'), 'example-one'],
@@ -118,10 +131,54 @@ test('trusted private resolver reuses the full fail-closed registry contract', (
 
   for (const [registryPath, siteIdentifier] of cases) {
     const result = runPrivateResolverCli(registryPath, siteIdentifier);
-    assert.equal(result.status, 2, `expected ${registryPath} / ${siteIdentifier} to fail closed`);
-    assert.equal(result.stdout, '');
-    assert.notEqual(result.stderr, '');
+    assertPrivateResolverFailure(result);
   }
+});
+
+test('trusted private resolver failures do not disclose private runtime details', () => {
+  const unknownSiteId = 'private-unregistered-site';
+  const validRegistryPath = fixture('valid.json');
+  assertPrivateResolverFailure(
+    runPrivateResolverCli(validRegistryPath, unknownSiteId),
+    [
+      validRegistryPath,
+      unknownSiteId,
+      'Unauthorized site identifier',
+    ],
+  );
+
+  const duplicateOriginPath = fixture('duplicate-origin.json');
+  assertPrivateResolverFailure(
+    runPrivateResolverCli(duplicateOriginPath, 'example-one'),
+    [
+      duplicateOriginPath,
+      'example-one',
+      'https://example-shared.test',
+      'duplicate canonical origin',
+    ],
+  );
+
+  const unexpectedMetadataPath = fixture('unexpected-site-field.json');
+  assertPrivateResolverFailure(
+    runPrivateResolverCli(unexpectedMetadataPath, 'example-one'),
+    [
+      unexpectedMetadataPath,
+      'example-one',
+      'apiKey',
+      'this-must-never-be-silently-accepted',
+      'unexpected field',
+    ],
+  );
+
+  const missingRegistryPath = fixture('private-registry-does-not-exist.json');
+  assertPrivateResolverFailure(
+    runPrivateResolverCli(missingRegistryPath, 'example-one'),
+    [
+      missingRegistryPath,
+      'example-one',
+      'Target registry not found',
+    ],
+  );
 });
 
 test('registry-backed resolution matches the production config/targets.json entries', () => {
