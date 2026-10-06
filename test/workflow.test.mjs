@@ -98,3 +98,10 @@ test('the public workflow cannot invoke the trusted private registry path', () =
   assert.doesNotMatch(workflow, /WQT_TARGET_REGISTRY/);
   assert.doesNotMatch(workflow, /registry-path|registry_path/);
 });
+
+test('the artifact upload remains local-only and includes the entire artifacts tree', () => {
+  const scanBlock = extractBlock(/^\s{2}scan:\s*$/);
+  assert.match(scanBlock, /name:\s*Upload raw, normalized, and scanner-native report evidence/);
+  assert.match(scanBlock, /^\s*path:\s*artifacts\/\s*$/m);
+  assert.doesNotMatch(scanBlock, /curl\s|wget\s|https?:\/\//);
+});

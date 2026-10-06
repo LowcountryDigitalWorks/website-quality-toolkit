@@ -90,10 +90,10 @@ jobs:
             --lighthouse artifacts/raw/lighthouse.json \
             --output artifacts/normalized/website-quality.json
 
-      - name: Write concise evidence summary
+      - name: Write operator evidence summary
         run: node scripts/write-summary.mjs artifacts/normalized/website-quality.json >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Upload raw and normalized evidence
+      - name: Upload raw, normalized, and scanner-native report evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:

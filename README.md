@@ -1,84 +1,127 @@
 # Website Quality Toolkit
 
-`LowcountryDigitalWorks/website-quality-toolkit` is the home for reusable **website-specific** quality tooling used by Lowcountry Digital Works (LDW) and, where appropriate, future client website projects.
+Website Quality Toolkit (WQT) is Lowcountry Digital Works' **website-specific deterministic sensing and normalized-evidence layer**. It runs maintained scanners against an authorized website, preserves what those scanners actually observed, and produces a stable machine contract for downstream use.
 
-This repository is service-enabling infrastructure, not an authorized standalone SaaS product or a claim that every intended capability is implemented.
+WQT is service-enabling infrastructure. It is **not** a customer-facing SaaS product, an SEO strategy engine, or an LDW quality-scoring system.
 
-## Baseline 0.3
+## What WQT does today
 
-The current authorized implementation is **Baseline 0.3 — Controlled Target Registry**.
+An authorized WQT run uses two pinned source tools:
 
-It keeps the accepted Baseline 0.1/0.2 evidence architecture and the same two authorized sites, and moves the fail-closed execution allowlist into a single reviewable registry file, `config/targets.json`:
+- **SiteOne Crawler 2.5.1** — whole-site same-authority technical/site/SEO evidence, including crawlability, HTTP/status behavior, redirects, titles and metadata, headings, robots/canonical/indexability-related source observations, internal/external crawl behavior, caching/performance-oriented findings, selected security evidence, accessibility-oriented findings, and other scanner-native quality evidence.
+- **Lighthouse 13.4.1** — a focused **homepage desktop lab audit** for performance, accessibility, best practices, and SEO.
 
-- `lowcountrydigitalworks` → `https://lowcountrydigitalworks.com`
-- `donovanfamilydentistry` → `https://donovanfamilydentistry.com`
+The current effective scan profile is **`site_only`**:
 
-There is no free-form URL input and no generic public scanner route. Both production scanner wrappers resolve the selected site identifier through the shared `scripts/resolve-target.sh` entry point, which is now backed by the registry, before scanner execution. The `workflow_dispatch` `site` input is a plain, **required, opaque string with no default** (validated fail-closed against the registry at run time), not a static dropdown that requires a workflow-YAML edit to add or remove an authorized site, and not a value that can be silently omitted into a production scan.
+- crawl the authorized site/origin under the accepted target boundary;
+- discover external URLs;
+- do **not** recursively crawl arbitrary third-party hosts;
+- preserve external-host skips as source coverage/context;
+- do not reinterpret an intentional external-host skip as an LDW site-failure verdict.
 
-**Baseline 0.3 may contain only the two targets already publicly disclosed in Baseline 0.2.** No third or new client/target may be added until the WQT/SEO workstream separately resolves target-registry confidentiality and raw/normalized scan-evidence confidentiality/storage — see [`docs/BASELINE-0.3.md`](docs/BASELINE-0.3.md#public-client-and-evidence-governance-gate). Future additions are **not** merely ordinary public pull requests until that gate is resolved.
+Future bounded scan-depth research such as explicitly authorized owned origins or one-hop external-link validation is tracked separately in [WQT-SCOPE-001 #23](https://github.com/LowcountryDigitalWorks/website-quality-toolkit/issues/23). WQT-UX-001 does not implement those profiles.
 
-The current architecture remains intentionally narrow:
+## What an operator gets
 
-- SiteOne Crawler `2.5.1` for whole-site evidence;
-- Lighthouse `13.4.1` for focused homepage lab evidence;
-- GitHub Actions for pull-request validation, explicit manual execution, summaries, and temporary artifacts;
-- a thin versioned `ldw.website-quality.v1` JSON normalizer (now including `schemaMinorVersion` and `siteId`) that preserves source evidence without implementing scanner logic.
+Operator surfaces for a successful run are:
 
-Baseline 0.3 details are documented in [`docs/BASELINE-0.3.md`](docs/BASELINE-0.3.md). The accepted Baseline 0.1 and 0.2 designs remain preserved as historical documentation in [`docs/BASELINE-0.1.md`](docs/BASELINE-0.1.md) and [`docs/BASELINE-0.2.md`](docs/BASELINE-0.2.md).
+| Path | Purpose |
+| --- | --- |
+| GitHub step summary (public workflow) / `summary.md` (accepted private-runtime shape after separately governed repin) | Bounded source-neutral operator landing page |
+| `reports/siteone.html` | **SOURCE-NATIVE SITEONE REPORT — NOT LDW QUALITY POLICY** |
+| `reports/lighthouse.html` | **SOURCE-NATIVE LIGHTHOUSE REPORT — NOT LDW QUALITY POLICY** |
+| `raw/siteone.json` | SiteOne machine evidence |
+| `raw/lighthouse.json` | Lighthouse machine evidence |
+| `normalized/website-quality.json` | Stable `ldw.website-quality.v1` machine contract for downstream consumers |
 
-### Trusted private-runtime boundary
+The HTML reports are scanner-native operator/remediation/debug surfaces. They are useful precisely because they can retain richer source detail than WQT intentionally normalizes. They are **not** canonical WQT semantics and must not be treated as LDW severity, policy, or a client-ready report.
 
-WQT-OPS-001 adds a separate trusted private-registry resolver and a library-only shared scanner core for future private/customer-owned execution. It does **not** add customer targets to the public registry, does not add a public registry-path/URL input, and does not deploy a private customer runner. The operating contract and boundaries are documented in [`docs/WQT-OPS-001-PRIVATE-RUNTIME.md`](docs/WQT-OPS-001-PRIVATE-RUNTIME.md).
+The normalized contract remains the authoritative reusable WQT output for downstream systems.
 
-### Evidence-first behavior
+## WQT, G.A.S., delivery automation, and project tests
 
-Baseline 0.3 does **not** establish quality thresholds.
+The intended architecture is:
 
-SiteOne `--ci` mode remains deliberately disabled so its built-in default gates do not become LDW policy accidentally. Lighthouse and SiteOne findings/scores are retained as scanner evidence. Actual tool/install/integrity/runtime/parsing failures may fail the workflow, but a scanner score or finding does not fail an evidence collection run merely for crossing an invented threshold.
+`authorized website -> WQT website sensors -> normalized WQT evidence -> private WQT operations/integrity/history -> G.A.S. -> separately governed delivery automation where required`
 
-Pull requests validate the harness and target registry without scanning either production website. Production evidence collection remains `workflow_dispatch` only; no recurring schedule is configured.
+Responsibilities stay distinct:
 
-## Intended scope
+| Layer | Primary job |
+| --- | --- |
+| **WQT** | What did the website-specific scanners observe, under what exact target/source/version/scope/provenance? |
+| **G.A.S. (Generative / Answer / Search)** | Broader provider-neutral Search / SEO / GEO-AIO / AI-visibility intelligence over WQT plus replaceable sources: longitudinal comparison, search analytics, discovery/index evidence, technical SEO, AI visibility, later-justified rank/SERP/local/link evidence, human review/decision support, measurement/outcome, and operator/service reporting. |
+| **Separately governed report/delivery automation** | Render and deliver approved client-facing material when that workflow is separately authorized. It does not replace G.A.S. analysis semantics. |
+| **Website repositories** | Project-local browser regression, accessibility, integration, and application-specific tests where those belong with the site itself. |
 
-As tools are evaluated, adopted, and validated, this repository may provide reusable website-quality capabilities such as:
+WQT must not rebuild G.A.S., and G.A.S. must not rebuild WQT's crawler.
 
-- SEO validation and crawling;
-- metadata and structured website checks;
-- broken-link validation;
-- accessibility-oriented website checks;
-- web performance and budget validation;
-- static-site and browser-level website QA;
-- other deterministic website-quality checks; and
-- web-specific security or DAST profiles where they logically belong.
+## Technical SEO boundary
 
-The dedicated LDW SEO / website-quality workstream remains authoritative for this repository's technical architecture, tool selection, and implementation roadmap.
+WQT owns **website-specific sensing** for technical/site-quality and technical/on-site SEO evidence supported by the accepted scanners.
 
-## Project-local browser and accessibility boundary
+WQT itself does **not** own:
 
-Website-specific browser regression and detailed accessibility tests remain with each website repository when that project already owns them. Baseline 0.3 does not move or duplicate those project-local suites.
+- keyword research;
+- rank tracking;
+- backlink intelligence;
+- competitor SERP research;
+- Search Console query/click/impression intelligence;
+- generative/AI visibility measurement;
+- prompt/citation visibility;
+- content strategy;
+- Google Business Profile/local rank intelligence; or
+- longitudinal cross-source interpretation.
 
-## Boundaries
+Those capabilities are not necessarily outside LDW or outside G.A.S. They belong in the broader G.A.S. Search / SEO / GEO-AIO / AI-visibility intelligence system through replaceable sensors/integrations when separately justified.
 
-This repository does **not** own:
+## Evidence policy
 
-- organization-wide GitHub governance;
-- generic GitHub Actions security policy;
-- general secret scanning across all repositories;
-- generic dependency-vulnerability scanning across all repositories;
-- generic SBOM generation;
-- generic repository SAST;
-- organization-wide workflow-security automation; or
-- unrelated application build and test pipelines.
+WQT is **evidence-first**:
 
-Organization-wide GitHub workflow orchestration and common repository-security automation belong in [`LowcountryDigitalWorks/.github`](https://github.com/LowcountryDigitalWorks/.github).
+- SiteOne `--ci` remains disabled so upstream default gates do not silently become LDW policy.
+- SiteOne statuses/scores and Lighthouse scores remain **SOURCE-NATIVE** evidence.
+- WQT does not invent a combined health score, LDW severity, automatic priority, ranking impact, causal explanation, business impact, or remediation recommendation.
+- Tool/install/integrity/runtime/parsing failures may fail a run; scanner findings do not fail evidence collection merely because a source score/status looks unfavorable.
+- Missing or unsupported evidence must not be converted into `healthy`, zero, or unchanged.
 
-Baseline 0.3 also does not add paid SaaS, persistent infrastructure, a database/dashboard, customer credentials/data, PHI, Google/Bing/Cloudflare provider APIs, Activepieces, SuiteDash, Pa11y, Linkinator, OWASP ZAP, active DAST, OCR, AI/LLM analysis, automatic issue creation, multi-tenancy, tenant/customer configuration, generic URL scanning, or customer-facing product functionality.
+The compact operator summary deliberately shows source status/message/facts while remaining bounded. Richer page-level detail stays in the source-native HTML/raw evidence unless a real accepted downstream need later justifies a normalized contract change.
+
+## Public and private execution
+
+The public repository owns reusable scanner, resolver, normalization, summary, tests, and workflow behavior.
+
+The public workflow keeps a fail-closed checked-in registry for the already-public Baseline 0.3 targets. There is no free-form URL input and no public generic scanner route. Pull requests validate the harness without scanning a live site; production evidence collection remains explicit `workflow_dispatch` only, with no recurring schedule.
+
+`LowcountryDigitalWorks/wqt-operations` is now the accepted **private execution/evidence/history surface** for managed-site operation. It owns private target authority and private evidence operations while consuming an immutable accepted WQT ref. Public WQT changes do not automatically alter that private runtime; private ref changes remain separately reviewed and pinned.
+
+See [`docs/WQT-OPS-001-PRIVATE-RUNTIME.md`](docs/WQT-OPS-001-PRIVATE-RUNTIME.md) for the trust boundary. Do not put customer/private registry data or customer evidence in this public repository.
+
+## Known current limitations
+
+- **Compression evidence — WQT-SEM-003 / #16:** pinned SiteOne 2.5.1 may emit a Brotli-support source warning, but current accepted evidence does not truthfully establish whether actual delivery used `zstd`, `br`, `gzip`, or none. Do not infer actual compression from that warning. The upstream-dependent work remains tracked in [issue #16](https://github.com/LowcountryDigitalWorks/website-quality-toolkit/issues/16).
+- **Lighthouse scope:** the accepted lab audit is the homepage only. Representative-route or site-wide lab coverage remains future research and should not be added unless real managed-site evidence shows the current scope is insufficient.
+- **External URLs:** under current `site_only` behavior, external URLs can be discovered but arbitrary third-party hosts are not recursively crawled. Deeper bounded profiles are research-only in [issue #23](https://github.com/LowcountryDigitalWorks/website-quality-toolkit/issues/23).
+- **Normalized detail:** SiteOne raw/native reports can contain richer page-level remediation data than `ldw.website-quality.v1`; WQT intentionally does not normalize every source field merely because it exists.
+
+## Evidence QA
+
+Scanner-version and normalized-semantic changes must follow [`docs/EVIDENCE-QA.md`](docs/EVIDENCE-QA.md), including exact source provenance, authorized target/scope verification, raw-to-normalized reconciliation, source-status preservation, known source limitations, summary/report consistency, fail-closed missing evidence, and a separately authorized post-merge real proof when actual scan/report behavior changes.
+
+## Accepted baseline history
+
+The original baseline documents remain historical release evidence; they are not the best current-state product introduction:
+
+- [`docs/BASELINE-0.1.md`](docs/BASELINE-0.1.md) — accepted initial reproducible evidence baseline.
+- [`docs/BASELINE-0.2.md`](docs/BASELINE-0.2.md) — accepted controlled second-site validation.
+- [`docs/BASELINE-0.3.md`](docs/BASELINE-0.3.md) — accepted public controlled-target-registry engine baseline.
+
+Do not rewrite historical retention, target, or release facts in those documents into current private-runtime policy.
 
 ## Local validation
 
-With Node `24.18.1`:
+The repository pins Node `24.18.1` through `.nvmrc` and Lighthouse `13.4.1` through the lockfile.
 
-On WSL/Linux, use Linux-native Node `24.18.1` and npm. Confirm `node` and `npm` resolve to Linux paths rather than `/mnt/c/...` Windows interoperability paths. This avoids installing or executing Windows-platform dependencies from the Linux workspace.
+On WSL/Linux, use Linux-native Node and npm. Confirm they resolve to Linux paths rather than Windows interoperability paths before installing dependencies.
 
 ```bash
 npm ci --ignore-scripts --no-audit --no-fund
@@ -88,6 +131,7 @@ node --check scripts/resolve-target.mjs
 node --check scripts/resolve-private-target.mjs
 node --check scripts/normalize.mjs
 node --check scripts/write-summary.mjs
+git diff --check
 ```
 
 To verify the pinned SiteOne release artifact without scanning a site:
@@ -96,13 +140,32 @@ To verify the pinned SiteOne release artifact without scanning a site:
 bash scripts/download-siteone.sh
 ```
 
-Target resolution can be checked without network access. It is registry-backed by [`config/targets.json`](config/targets.json):
+Target resolution can be checked without network access. The public path is registry-backed by [`config/targets.json`](config/targets.json):
 
 ```bash
 bash scripts/resolve-target.sh lowcountrydigitalworks
 bash scripts/resolve-target.sh donovanfamilydentistry
 ```
 
-Any blank, malformed, URL-shaped, unknown, disabled, or future identifier is rejected, as is a registry that is missing, malformed, contains a duplicate `id`, a duplicate canonical origin, an unexpected root/entry field, a missing/unauthorized `environment`, or a non-canonical/unsafe (non-HTTPS, userinfo, path/query/fragment, trailing-slash/default-port alias, IP-literal, or `localhost`) `origin`. Production scanner wrappers require an authorized `WQT_SITE_ID`; they do not accept a free-form URL, and the production CLI never accepts a caller-controlled registry path (it always resolves against the checked-in `config/targets.json`).
+Any blank, malformed, URL-shaped, unknown, disabled, duplicate, noncanonical, or unsafe target/registry input fails closed. Production scanner wrappers accept an authorized opaque `WQT_SITE_ID`; they do not accept a caller-supplied URL or registry path.
 
-Website-specific capabilities should be added here only when they provide reusable value and fit the LDW preference for deterministic, low-cost, portable, automation-first tooling.
+## Repository boundaries
+
+WQT does not add, merely for convenience:
+
+- a customer portal/dashboard or multi-tenant SaaS;
+- a database or customer-state store;
+- credentials, OAuth, provider API keys, or customer secrets;
+- recurrence/scheduling in the public toolkit;
+- runtime AI/LLM analysis;
+- automatic issue creation or remediation;
+- unrestricted external crawling;
+- another crawler or duplicate scanner logic;
+- GSC/GA/provider analytics clients;
+- rank/backlink/keyword databases;
+- customer-facing reporting/delivery behavior; or
+- organization-wide GitHub governance/security automation.
+
+Organization-wide GitHub workflow orchestration and common repository-security automation belong in [`LowcountryDigitalWorks/.github`](https://github.com/LowcountryDigitalWorks/.github).
+
+Reusable website-quality capabilities should be added here only when real scan/consumer evidence justifies them and the result remains deterministic, portable, low-cost, and inside WQT's website-sensing boundary.
