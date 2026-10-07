@@ -386,6 +386,7 @@ class CurlTransport:
             "--disable",
             "--silent",
             "--show-error",
+            "--globoff",
             "--noproxy", "*",
             "--proto", "=http,https",
             "--max-time", str(REQUEST_TIMEOUT_SECONDS),

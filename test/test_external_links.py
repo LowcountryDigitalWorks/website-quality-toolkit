@@ -156,6 +156,8 @@ class ExternalLinkTests(unittest.TestCase):
         self.assertIn("--resolve", command)
         self.assertIn(f"safe.example.org:443:{PUBLIC_V4}", command)
         self.assertEqual(command[-1], source.url)
+        self.assertIn("--globoff", command)
+        self.assertLess(command.index("--globoff"), len(command) - 1)
         self.assertIn("--head", command)
         joined = " ".join(command).lower()
         self.assertNotIn("--insecure", joined)
@@ -163,6 +165,27 @@ class ExternalLinkTests(unittest.TestCase):
         self.assertNotIn("--location", joined)
         self.assertNotIn(" -l", joined)
         self.assertIn("--noproxy *", joined)
+
+    def test_curl_globbing_is_disabled_and_glob_metacharacters_stay_literal(self):
+        urls = [
+            "https://safe.example.org/item[1-50]",
+            "https://safe.example.org/{one,two,three}",
+            "https://safe.example.org/path?value={one,two}",
+        ]
+        resolver = FakeResolver({"safe.example.org": [PUBLIC_V4]})
+        for url in urls:
+            with self.subTest(url=url):
+                source = el.SourceLink(url, TARGET, 1)
+                destination = el.validate_destination(source, resolver)
+                command = el.CurlTransport("curl").build_command(destination, "HEAD", "/tmp/headers")
+                self.assertIn("--globoff", command)
+                self.assertEqual(command[-1], url)
+                self.assertEqual(command.count(url), 1)
+                self.assertLess(command.index("--globoff"), len(command) - 1)
+                self.assertIn("--resolve", command)
+                self.assertIn(f"safe.example.org:443:{PUBLIC_V4}", command)
+                self.assertNotIn("--insecure", command)
+                self.assertNotIn("--location", command)
 
     def test_unsafe_destination_never_reaches_transport(self):
         transport = FakeTransport()
