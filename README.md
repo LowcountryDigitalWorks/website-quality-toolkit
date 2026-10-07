@@ -33,6 +33,7 @@ Operator surfaces for a successful run are:
 | `raw/siteone.json` | SiteOne machine evidence |
 | `raw/lighthouse.json` | Lighthouse machine evidence |
 | `normalized/website-quality.json` | Stable `ldw.website-quality.v1` machine contract for downstream consumers |
+| `external-links.json` | Stable `ldw.wqt-external-links.v1` machine sidecar for external link reachability evidence |
 
 The HTML reports are scanner-native operator/remediation/debug surfaces. They are useful precisely because they can retain richer source detail than WQT intentionally normalizes. They are **not** canonical WQT semantics and must not be treated as LDW severity, policy, or a client-ready report.
 
@@ -131,6 +132,7 @@ node --check scripts/resolve-target.mjs
 node --check scripts/resolve-private-target.mjs
 node --check scripts/normalize.mjs
 node --check scripts/write-summary.mjs
+node --check scripts/probe-external-links.mjs
 git diff --check
 ```
 
