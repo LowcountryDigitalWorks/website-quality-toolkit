@@ -1,0 +1,29 @@
+{
+  "crawler": {
+    "command": "siteone-crawler --url=https://example.test --output=json",
+    "executedAt": "2026-10-06 00:00:00",
+    "name": "SiteOne Crawler",
+    "version": "2.5.1.20260627"
+  },
+  "options": {"url": "https://example.test"},
+  "qualityScores": {"categories": [], "overall": {"score": 9.0}},
+  "summary": {"items": [{"aplCode": "external-urls", "status": "NOTICE", "text": "External URLs - 3 external URL(s) found"}]},
+  "tables": {
+    "external-urls": {
+      "aplCode": "external-urls",
+      "rows": [
+        {"count": "1", "foundOn": "https://example.test/", "url": "https://b.example.org/path"},
+        {"count": "2", "foundOn": "https://example.test/a", "url": "https://a.example.org/path"},
+        {"count": "1", "foundOn": "https://example.test/", "url": "http://c.example.org/path"}
+      ]
+    },
+    "skipped": {
+      "aplCode": "skipped",
+      "rows": [
+        {"reason": "Not allowed host", "sourceAttr": "<a href>", "sourceUqId": "/", "url": "https://b.example.org/path"},
+        {"reason": "Not allowed host", "sourceAttr": "<a href>", "sourceUqId": "/a", "url": "https://a.example.org/path"},
+        {"reason": "Not allowed host", "sourceAttr": "<a href>", "sourceUqId": "/", "url": "http://c.example.org/path"}
+      ]
+    }
+  }
+}
