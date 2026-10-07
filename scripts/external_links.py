@@ -317,6 +317,61 @@ def _parse_location(header_bytes: bytes) -> str | None:
         if line.lower().startswith("location:"):
             locations.append(_bounded_ascii(line.split(":", 1)[1].strip(), MAX_LOCATION_CHARS))
     return locations[-1] if locations else None
+
+
+def _safe_redirect_descriptor(location: str | None) -> dict[str, object]:
+    if location is None:
+        return {"locationKind": "absent"}
+    if (
+        not location
+        or "\\" in location
+        or any(ord(ch) < 0x20 or ord(ch) == 0x7F for ch in location)
+    ):
+        return {"locationKind": "invalid"}
+    candidate = _bounded_ascii(location, MAX_LOCATION_CHARS).strip()
+    if not candidate:
+        return {"locationKind": "invalid"}
+    try:
+        parsed = urlsplit(candidate)
+    except ValueError:
+        return {"locationKind": "invalid"}
+
+    if not parsed.scheme:
+        return {"locationKind": "relative"}
+
+    scheme = parsed.scheme.lower()
+    if scheme not in {"http", "https"}:
+        return {"locationKind": "other_scheme"}
+
+    try:
+        hostname = parsed.hostname
+        port = parsed.port
+    except ValueError:
+        return {"locationKind": "invalid"}
+    if not hostname:
+        return {"locationKind": "invalid"}
+
+    try:
+        canonical_hostname = ipaddress.ip_address(hostname).compressed.lower()
+    except ValueError:
+        try:
+            canonical_hostname = _canonical_dns_name(hostname)
+        except ExternalLinkError:
+            return {"locationKind": "invalid"}
+
+    effective_port = port if port is not None else (443 if scheme == "https" else 80)
+    if not (1 <= effective_port <= 65535):
+        return {"locationKind": "invalid"}
+
+    return {
+        "locationKind": f"absolute_{scheme}",
+        "scheme": scheme,
+        "canonicalHostname": canonical_hostname,
+        "effectivePort": effective_port,
+        "pathPresent": parsed.path not in {"", "/"},
+    }
+
+
 class CurlTransport:
     """System curl transport with disabled config/proxy and exact address pinning."""
 
@@ -449,7 +504,7 @@ def _base_result(source: SourceLink, state: str, *, attempted: bool, reason: str
         "attempted": attempted,
         "method": None,
         "httpStatus": None,
-        "location": None,
+        "redirect": None,
         "reason": reason,
         "pinnedAddress": None,
     }
@@ -472,7 +527,7 @@ def _probe_one(destination: ValidatedDestination, transport: Transport, limiter:
         "attempted": True,
         "method": response.method,
         "httpStatus": response.status,
-        "location": response.location if state == "redirect_observed" else None,
+        "redirect": _safe_redirect_descriptor(response.location) if state == "redirect_observed" else None,
         "reason": reason,
         "pinnedAddress": destination.pinned_address,
     }
@@ -592,8 +647,17 @@ def render_summary(sidecar: Mapping[str, object]) -> str:
             detail = f"{item['state']} status={status}"
             if item.get("reason"):
                 detail += f" reason={item['reason']}"
-            if item.get("location"):
-                detail += f" location={item['location']}"
+            redirect = item.get("redirect")
+            if isinstance(redirect, Mapping):
+                kind = redirect.get("locationKind", "invalid")
+                detail += f" redirect={kind}"
+                if kind in {"absolute_http", "absolute_https"}:
+                    detail += (
+                        f" scheme={redirect.get('scheme')}"
+                        f" host={redirect.get('canonicalHostname')}"
+                        f" port={redirect.get('effectivePort')}"
+                        f" pathPresent={str(bool(redirect.get('pathPresent'))).lower()}"
+                    )
             display_url = _bounded_ascii(item["url"], 512).replace("`", "%60")
             lines.append(f"- `{display_url}` — {detail}")
         omitted = len(attention) - MAX_ATTENTION_ITEMS

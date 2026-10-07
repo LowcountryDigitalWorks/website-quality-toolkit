@@ -202,7 +202,79 @@ class ExternalLinkTests(unittest.TestCase):
         result = sidecar_for([url], transport=transport)
         item = result["results"][0]
         self.assertEqual(item["state"], "redirect_observed")
-        self.assertEqual(item["location"], "https://elsewhere.example/b")
+        self.assertEqual(item["redirect"], {
+            "locationKind": "absolute_https",
+            "scheme": "https",
+            "canonicalHostname": "elsewhere.example",
+            "effectivePort": 443,
+            "pathPresent": True,
+        })
+        self.assertNotIn("location", item)
+        self.assertEqual([method for _dest, method in transport.calls], ["HEAD"])
+
+    def test_sensitive_absolute_redirect_material_is_never_persisted_or_summarized(self):
+        url = "https://redirect-sensitive.example.org/a"
+        raw_location = "https://user:pass@example.org/path?token=SECRET#fragment"
+        transport = FakeTransport({
+            (url, "HEAD"): el.TransportResponse(method="HEAD", status=302, location=raw_location)
+        })
+        result = sidecar_for([url], transport=transport)
+        item = result["results"][0]
+        self.assertEqual(item["state"], "redirect_observed")
+        self.assertEqual(item["redirect"], {
+            "locationKind": "absolute_https",
+            "scheme": "https",
+            "canonicalHostname": "example.org",
+            "effectivePort": 443,
+            "pathPresent": True,
+        })
+        combined = json.dumps(result, sort_keys=True) + "\n" + el.render_summary(result)
+        for forbidden in (raw_location, "user", "pass", "token", "SECRET", "#fragment", "?token="):
+            self.assertNotIn(forbidden, combined)
+        self.assertEqual([method for _dest, method in transport.calls], ["HEAD"])
+
+    def test_presigned_redirect_query_material_is_never_persisted(self):
+        url = "https://redirect-presigned.example.org/a"
+        raw_location = "https://example.org/object?X-Amz-Credential=SECRET&X-Amz-Signature=ABC"
+        transport = FakeTransport({
+            (url, "HEAD"): el.TransportResponse(method="HEAD", status=307, location=raw_location)
+        })
+        result = sidecar_for([url], transport=transport)
+        item = result["results"][0]
+        self.assertEqual(item["redirect"]["locationKind"], "absolute_https")
+        combined = json.dumps(result, sort_keys=True) + "\n" + el.render_summary(result)
+        for forbidden in (raw_location, "X-Amz-Credential", "SECRET", "X-Amz-Signature", "ABC"):
+            self.assertNotIn(forbidden, combined)
+        self.assertEqual([method for _dest, method in transport.calls], ["HEAD"])
+
+    def test_relative_redirect_is_generic_and_does_not_persist_target_material(self):
+        url = "https://redirect-relative.example.org/a"
+        raw_location = "/callback?code=SECRET#state"
+        transport = FakeTransport({
+            (url, "HEAD"): el.TransportResponse(method="HEAD", status=302, location=raw_location)
+        })
+        result = sidecar_for([url], transport=transport)
+        item = result["results"][0]
+        self.assertEqual(item["state"], "redirect_observed")
+        self.assertEqual(item["redirect"], {"locationKind": "relative"})
+        combined = json.dumps(result, sort_keys=True) + "\n" + el.render_summary(result)
+        for forbidden in (raw_location, "callback", "code=SECRET", "SECRET"):
+            self.assertNotIn(forbidden, combined)
+        self.assertEqual([method for _dest, method in transport.calls], ["HEAD"])
+
+    def test_malformed_redirect_is_nonfatal_bounded_and_factual(self):
+        url = "https://redirect-invalid.example.org/a"
+        raw_location = "https://[malformed.example?token=SECRET"
+        transport = FakeTransport({
+            (url, "HEAD"): el.TransportResponse(method="HEAD", status=302, location=raw_location)
+        })
+        result = sidecar_for([url], transport=transport)
+        item = result["results"][0]
+        self.assertEqual(item["state"], "redirect_observed")
+        self.assertEqual(item["redirect"], {"locationKind": "invalid"})
+        combined = json.dumps(result, sort_keys=True) + "\n" + el.render_summary(result)
+        self.assertNotIn(raw_location, combined)
+        self.assertNotIn("SECRET", combined)
         self.assertEqual([method for _dest, method in transport.calls], ["HEAD"])
 
     def test_dns_and_transport_failures_are_unavailable_unknown(self):
