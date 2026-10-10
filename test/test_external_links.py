@@ -201,13 +201,43 @@ class ExternalLinkTests(unittest.TestCase):
         self.assertEqual(result["results"][0]["state"], "reachable")
         self.assertEqual(result["results"][0]["httpStatus"], 204)
 
-    def test_404_and_410_are_http_error(self):
+    def test_negative_head_404_and_410_are_verified_by_get(self):
+        self.assertEqual(el.HEAD_FALLBACK_STATUSES, (404, 405, 410, 501))
         for status in (404, 410):
-            url = f"https://error{status}.example.org/a"
-            transport = FakeTransport({(url, "HEAD"): el.TransportResponse(method="HEAD", status=status)})
-            result = sidecar_for([url], transport=transport)
-            self.assertEqual(result["results"][0]["state"], "http_error")
-            self.assertEqual(result["results"][0]["httpStatus"], status)
+            hostname = f"error{status}.example.org"
+            url = f"https://{hostname}/a"
+            resolver = FakeResolver({hostname: [PUBLIC_V4]})
+            transport = FakeTransport({
+                (url, "HEAD"): el.TransportResponse(method="HEAD", status=status),
+                (url, "GET"): el.TransportResponse(method="GET", status=status),
+            })
+            result = sidecar_for([url], resolver=resolver, transport=transport)
+            item = result["results"][0]
+            self.assertEqual(item["state"], "http_error")
+            self.assertEqual(item["httpStatus"], status)
+            self.assertEqual(item["method"], "GET")
+            self.assertEqual([method for _dest, method in transport.calls], ["HEAD", "GET"])
+            self.assertIs(transport.calls[0][0], transport.calls[1][0])
+            self.assertEqual(transport.calls[0][0].pinned_address, PUBLIC_V4)
+            self.assertEqual(resolver.calls, [(hostname, 443)])
+
+    def test_negative_head_404_and_410_can_verify_reachable(self):
+        for status in (404, 410):
+            hostname = f"live{status}.example.org"
+            url = f"https://{hostname}/a"
+            resolver = FakeResolver({hostname: [PUBLIC_V4]})
+            transport = FakeTransport({
+                (url, "HEAD"): el.TransportResponse(method="HEAD", status=status),
+                (url, "GET"): el.TransportResponse(method="GET", status=200),
+            })
+            result = sidecar_for([url], resolver=resolver, transport=transport)
+            item = result["results"][0]
+            self.assertEqual(item["state"], "reachable")
+            self.assertEqual(item["httpStatus"], 200)
+            self.assertEqual(item["method"], "GET")
+            self.assertEqual([method for _dest, method in transport.calls], ["HEAD", "GET"])
+            self.assertIs(transport.calls[0][0], transport.calls[1][0])
+            self.assertEqual(resolver.calls, [(hostname, 443)])
 
     def test_403_and_429_are_blocked_without_fallback(self):
         for status in (403, 429):
@@ -215,6 +245,20 @@ class ExternalLinkTests(unittest.TestCase):
             transport = FakeTransport({(url, "HEAD"): el.TransportResponse(method="HEAD", status=status)})
             result = sidecar_for([url], transport=transport)
             self.assertEqual(result["results"][0]["state"], "blocked_or_rate_limited")
+            self.assertEqual([method for _dest, method in transport.calls], ["HEAD"])
+
+    def test_500_and_999_do_not_fallback(self):
+        expectations = {
+            500: ("http_error", None),
+            999: ("unavailable_unknown", "invalid_http_status"),
+        }
+        for status, (state, reason) in expectations.items():
+            url = f"https://status{status}.example.org/a"
+            transport = FakeTransport({(url, "HEAD"): el.TransportResponse(method="HEAD", status=status)})
+            result = sidecar_for([url], transport=transport)
+            item = result["results"][0]
+            self.assertEqual(item["state"], state)
+            self.assertEqual(item["reason"], reason)
             self.assertEqual([method for _dest, method in transport.calls], ["HEAD"])
 
     def test_redirect_is_observed_and_not_followed(self):
@@ -300,14 +344,16 @@ class ExternalLinkTests(unittest.TestCase):
         self.assertNotIn("SECRET", combined)
         self.assertEqual([method for _dest, method in transport.calls], ["HEAD"])
 
-    def test_dns_and_transport_failures_are_unavailable_unknown(self):
+    def test_dns_and_transport_failures_are_unavailable_unknown_without_fallback(self):
+        transport = FakeTransport()
         dns = sidecar_for(
             ["https://dnsfail.example.org/a"],
             resolver=FakeResolver(failure=socket.gaierror("synthetic")),
-            transport=FakeTransport(),
+            transport=transport,
         )
         self.assertEqual(dns["results"][0]["state"], "unavailable_unknown")
         self.assertEqual(dns["results"][0]["reason"], "dns_failure")
+        self.assertEqual(transport.calls, [])
         for reason in ("tls_failure", "timeout", "connect_failure", "transport_failure"):
             url = f"https://{reason.replace('_','-')}.example.org/a"
             transport = FakeTransport({
@@ -316,8 +362,9 @@ class ExternalLinkTests(unittest.TestCase):
             result = sidecar_for([url], transport=transport)
             self.assertEqual(result["results"][0]["state"], "unavailable_unknown")
             self.assertEqual(result["results"][0]["reason"], reason)
+            self.assertEqual([method for _dest, method in transport.calls], ["HEAD"])
 
-    def test_head_unsupported_gets_exactly_one_bounded_get_fallback(self):
+    def test_head_fallback_statuses_get_exactly_one_bounded_get(self):
         for status in el.HEAD_FALLBACK_STATUSES:
             url = f"https://fallback{status}.example.org/a"
             transport = FakeTransport({
@@ -408,7 +455,7 @@ class ExternalLinkTests(unittest.TestCase):
         urls = ["https://ok.example.org/a", "https://bad.example.org/a"]
         transport = FakeTransport({
             (urls[0], "HEAD"): el.TransportResponse(method="HEAD", status=200),
-            (urls[1], "HEAD"): el.TransportResponse(method="HEAD", status=404),
+            (urls[1], "HEAD"): el.TransportResponse(method="HEAD", status=500),
         })
         result = sidecar_for(urls, transport=transport)
         self.assertEqual(result["schemaVersion"], "ldw.wqt-external-links.v1")
@@ -417,6 +464,7 @@ class ExternalLinkTests(unittest.TestCase):
         self.assertEqual(result["source"]["wqtCommit"], WQT_COMMIT)
         self.assertEqual(result["source"]["siteOneTarget"], TARGET)
         self.assertRegex(result["policySha256"], r"^[0-9a-f]{64}$")
+        self.assertEqual(result["policy"]["headFallbackStatuses"], [404, 405, 410, 501])
         self.assertEqual(result["counts"], {"discovered": 2, "attempted": 2, "rejected": 0, "unattempted": 0})
         summary = el.render_summary(result)
         self.assertIn("Reachability is observed from the GitHub runner", summary)
@@ -425,7 +473,7 @@ class ExternalLinkTests(unittest.TestCase):
     def test_head_to_get_fallback_is_rate_limited_as_two_host_requests(self):
         url = "https://paced.example.org/a"
         transport = FakeTransport({
-            (url, "HEAD"): el.TransportResponse(method="HEAD", status=405),
+            (url, "HEAD"): el.TransportResponse(method="HEAD", status=404),
             (url, "GET"): el.TransportResponse(method="GET", status=200),
         })
         clock_values = iter([0.0, 0.1, 1.1])
@@ -475,7 +523,7 @@ class ExternalLinkTests(unittest.TestCase):
             el.build_sidecar(
                 site_id=SITE_ID,
                 target=TARGET,
-            wqt_commit=WQT_COMMIT,
+                wqt_commit=WQT_COMMIT,
                 siteone_bytes=json.dumps(value).encode(),
                 resolver=FakeResolver(),
                 transport=FakeTransport(),
