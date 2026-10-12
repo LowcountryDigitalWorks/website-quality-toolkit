@@ -19,7 +19,9 @@ The current effective scan profile is **`site_only`**:
 - preserve external-host skips as source coverage/context;
 - do not reinterpret an intentional external-host skip as an LDW site-failure verdict.
 
-Future bounded scan-depth research such as explicitly authorized owned origins or one-hop external-link validation is tracked separately in [WQT-SCOPE-001 #23](https://github.com/LowcountryDigitalWorks/website-quality-toolkit/issues/23). WQT-UX-001 does not implement those profiles.
+An optional manual guarded external-link reachability capability exists as a separate sidecar (`ldw.wqt-external-links.v1`, shipped in #25/#28/#29). It checks bounded single-hop reachability for discovered external links without recursively crawling third-party sites and without widening `site_only` origin authority.
+
+Multi-origin scan profiles such as `owned_origins` (previously tracked under [WQT-SCOPE-001 #23](https://github.com/LowcountryDigitalWorks/website-quality-toolkit/issues/23)) remain deliberately demand-gated; current WQT does not implement those profiles unless a fresh evidence-backed gate is authorized.
 
 ## What an operator gets
 
@@ -27,7 +29,7 @@ Operator surfaces for a successful run are:
 
 | Path | Purpose |
 | --- | --- |
-| GitHub step summary (public workflow) / `summary.md` (accepted private-runtime shape after separately governed repin) | Bounded source-neutral operator landing page |
+| GitHub step summary (public workflow) / `summary.md` (accepted private-runtime operator summary surface) | Bounded source-neutral operator landing page |
 | `reports/siteone.html` | **SOURCE-NATIVE SITEONE REPORT — NOT LDW QUALITY POLICY** |
 | `reports/lighthouse.html` | **SOURCE-NATIVE LIGHTHOUSE REPORT — NOT LDW QUALITY POLICY** |
 | `raw/siteone.json` | SiteOne machine evidence |
@@ -92,15 +94,17 @@ The public repository owns reusable scanner, resolver, normalization, summary, t
 
 The public workflow keeps a fail-closed checked-in registry for the already-public Baseline 0.3 targets. There is no free-form URL input and no public generic scanner route. Pull requests validate the harness without scanning a live site; production evidence collection remains explicit `workflow_dispatch` only, with no recurring schedule.
 
-`LowcountryDigitalWorks/wqt-operations` is now the accepted **private execution/evidence/history surface** for managed-site operation. It owns private target authority and private evidence operations while consuming an immutable accepted WQT ref. Public WQT changes do not automatically alter that private runtime; private ref changes remain separately reviewed and pinned.
+`LowcountryDigitalWorks/wqt-operations` is now the accepted **private execution/evidence/history surface** for managed-site operation. It owns private target authority and private evidence operations while consuming an immutable accepted WQT ref. Public WQT changes do not automatically alter that private runtime; private ref changes remain separately reviewed, tested, and pinned.
+
+Public capability additions (such as the guarded external-link reachability sidecar) do not imply that private customer runs automatically execute or adopt those capabilities unless a private repin/adoption gate has actually occurred.
 
 See [`docs/WQT-OPS-001-PRIVATE-RUNTIME.md`](docs/WQT-OPS-001-PRIVATE-RUNTIME.md) for the trust boundary. Do not put customer/private registry data or customer evidence in this public repository.
 
 ## Known current limitations
 
-- **Compression evidence — WQT-SEM-003 / #16:** pinned SiteOne 2.5.1 may emit a Brotli-support source warning, but current accepted evidence does not truthfully establish whether actual delivery used `zstd`, `br`, `gzip`, or none. Do not infer actual compression from that warning. The upstream-dependent work remains tracked in [issue #16](https://github.com/LowcountryDigitalWorks/website-quality-toolkit/issues/16).
+- **Compression evidence — WQT-SEM-003 / #16:** pinned SiteOne 2.5.1 may emit a Brotli-support source warning, but current accepted evidence does not truthfully establish whether actual delivery used `zstd`, `br`, `gzip`, or none. Do not infer actual compression from that warning. This remains the only current public upstream-blocked product gate, tracked in [issue #16](https://github.com/LowcountryDigitalWorks/website-quality-toolkit/issues/16).
 - **Lighthouse scope:** the accepted lab audit is the homepage only. Representative-route or site-wide lab coverage remains future research and should not be added unless real managed-site evidence shows the current scope is insufficient.
-- **External URLs:** under current `site_only` behavior, external URLs can be discovered but arbitrary third-party hosts are not recursively crawled. Deeper bounded profiles are research-only in [issue #23](https://github.com/LowcountryDigitalWorks/website-quality-toolkit/issues/23).
+- **External URL boundaries:** under core `site_only` scanning, external URLs are discovered but third-party hosts are not recursively crawled. Bounded single-hop reachability validation is available via the optional manual `ldw.wqt-external-links.v1` sidecar, but third-party sites are never crawled and origin authority is not widened. Multi-origin (`owned_origins`, previously tracked under [WQT-SCOPE-001 #23](https://github.com/LowcountryDigitalWorks/website-quality-toolkit/issues/23)) authority remains demand-gated and WQT does not implement those profiles without a fresh evidence-backed gate.
 - **Normalized detail:** SiteOne raw/native reports can contain richer page-level remediation data than `ldw.website-quality.v1`; WQT intentionally does not normalize every source field merely because it exists.
 
 ## Evidence QA
@@ -113,7 +117,7 @@ The original baseline documents remain historical release evidence; they are not
 
 - [`docs/BASELINE-0.1.md`](docs/BASELINE-0.1.md) — accepted initial reproducible evidence baseline.
 - [`docs/BASELINE-0.2.md`](docs/BASELINE-0.2.md) — accepted controlled second-site validation.
-- [`docs/BASELINE-0.3.md`](docs/BASELINE-0.3.md) — accepted public controlled-target-registry engine baseline.
+- [`docs/BASELINE-0.3.md`](docs/BASELINE-0.3.md) — historical/accepted public engine baseline (not the current managed-site operating surface).
 
 Do not rewrite historical retention, target, or release facts in those documents into current private-runtime policy.
 

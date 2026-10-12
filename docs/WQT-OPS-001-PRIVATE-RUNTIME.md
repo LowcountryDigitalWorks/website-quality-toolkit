@@ -1,6 +1,6 @@
 # WQT-OPS-001 — Trusted Private Runtime Boundary
 
-WQT-OPS-001 defines how the public Website Quality Toolkit (WQT) can be consumed by a trusted private/customer-owned runtime without turning the public repository into an arbitrary-URL scanner or customer-state store.
+WQT-OPS-001 defines how the public Website Quality Toolkit (WQT) can be consumed by a trusted private runtime without turning the public repository into an arbitrary-URL scanner or customer-state store.
 
 ## Current operating model
 
@@ -8,11 +8,13 @@ The accepted current shape is:
 
 `private authorized site profile -> private target registry -> immutable accepted WQT ref -> shared fail-closed resolver/scanner semantics -> private raw + normalized evidence -> private integrity/history -> G.A.S. and other separately approved downstream consumers`
 
-`LowcountryDigitalWorks/wqt-operations` is the accepted **private execution/evidence/history surface** for the current managed-site path. It is no longer merely a hypothetical future wrapper.
+`LowcountryDigitalWorks/wqt-operations` is the accepted **private execution/evidence/history surface** for managed-site operation and the shared LDW-managed default deployment tier under accepted WQT-OPS-002 policy. It is no longer merely a hypothetical future wrapper.
 
 The public `LowcountryDigitalWorks/website-quality-toolkit` repository remains reusable scanner, normalization, summary, and contract code. Real customer target authority and real customer evidence remain outside this public repository.
 
-Private runtime ref changes are separately governed. A merge to public WQT does not automatically change the private runtime: `wqt-operations` continues to pin an exact accepted WQT commit/tree until a later bounded repin is reviewed and accepted.
+Private runtime ref changes are separately governed. A merge to public WQT does not automatically change the private runtime: `wqt-operations` continues to pin an exact accepted WQT commit/tree until a later bounded repin is reviewed and accepted. Availability of new capabilities in public WQT (such as guarded external-link reachability) does not imply private runtime adoption or customer execution until a private repin and adoption gate occurs.
+
+Scan and semantic evidence execution remains manual/point-in-time unless a service-specific cadence gate is separately authorized and accepted. Enrollment in Web Care or managed-site operation does not automatically activate scheduled or recurring scanning; private recurrence is currently OFF in the shared runtime.
 
 ## Authority boundary
 
@@ -113,11 +115,11 @@ Separately governed report/delivery automation may render approved client-facing
 The accepted private surface owns, subject to its own Product/Portfolio gates:
 
 - private opaque target authority;
-- execution against an immutable accepted WQT ref;
+- execution against an immutable accepted WQT ref (public WQT capability additions do not automatically alter or execute in the private runtime);
 - private raw/normalized evidence storage within the approved artifact boundary;
 - integrity/provenance checks;
 - private semantic history/consumer behavior where separately accepted;
-- retention/cadence/enrollment policy where separately accepted.
+- retention and manual/point-in-time execution policies; private recurrence remains OFF by default and requires explicit service-specific cadence authorization.
 
 This public document intentionally does **not** contain private registry contents, customer identities, customer evidence, credentials, or private operational records.
 
@@ -129,6 +131,7 @@ This boundary does not authorize or add:
 - a public arbitrary-URL scanner;
 - a public registry-path workflow input;
 - a public recurring schedule;
+- automatic recurrence activation merely from managed-site or Web Care enrollment;
 - credentials, secrets, OAuth, or API keys;
 - a database, dashboard, portal, or SaaS;
 - automatic remediation;
@@ -140,7 +143,7 @@ This boundary does not authorize or add:
 
 Incremental recurring infrastructure cost target remains **$0**.
 
-Preferred production ownership remains customer-owned private execution with LDW scoped access where practical. A bounded LDW-owned private pilot/runtime is separately governed and must keep customer/private state out of the public WQT repository.
+Under accepted WQT-OPS-002 policy, the shared LDW-managed private runtime (`LowcountryDigitalWorks/wqt-operations`) is the accepted default deployment tier for current managed-site operation. Customer-owned or dedicated private runtime deployment remains an exception or contractual path when separately required by a customer agreement, not the default operating preference. Customer and private target/evidence state must always remain outside the public WQT repository.
 
 ## Validation expectations
 
