@@ -247,10 +247,22 @@ class ExternalLinkTests(unittest.TestCase):
             self.assertEqual(result["results"][0]["state"], "blocked_or_rate_limited")
             self.assertEqual([method for _dest, method in transport.calls], ["HEAD"])
 
-    def test_500_and_999_do_not_fallback(self):
+    def test_http_999_is_classified_as_blocked_or_rate_limited_without_fallback(self):
+        url = "https://www.linkedin.com/in/example"
+        transport = FakeTransport({(url, "HEAD"): el.TransportResponse(method="HEAD", status=999)})
+        result = sidecar_for([url], transport=transport)
+        item = result["results"][0]
+        self.assertEqual(item["state"], "blocked_or_rate_limited")
+        self.assertEqual(item["reason"], "nonstandard_bot_policy_status")
+        self.assertEqual(item["httpStatus"], 999)
+        self.assertEqual([method for _dest, method in transport.calls], ["HEAD"])
+
+    def test_nonstandard_statuses_other_than_999_remain_invalid_http_status(self):
         expectations = {
             500: ("http_error", None),
-            999: ("unavailable_unknown", "invalid_http_status"),
+            600: ("unavailable_unknown", "invalid_http_status"),
+            700: ("unavailable_unknown", "invalid_http_status"),
+            998: ("unavailable_unknown", "invalid_http_status"),
         }
         for status, (state, reason) in expectations.items():
             url = f"https://status{status}.example.org/a"
@@ -259,6 +271,7 @@ class ExternalLinkTests(unittest.TestCase):
             item = result["results"][0]
             self.assertEqual(item["state"], state)
             self.assertEqual(item["reason"], reason)
+            self.assertEqual(item["httpStatus"], status)
             self.assertEqual([method for _dest, method in transport.calls], ["HEAD"])
 
     def test_redirect_is_observed_and_not_followed(self):

@@ -452,6 +452,8 @@ def _classify_response(response: TransportResponse) -> tuple[str, str | None]:
     if response.error_reason:
         return "unavailable_unknown", response.error_reason
     status = response.status
+    if status == 999:
+        return "blocked_or_rate_limited", "nonstandard_bot_policy_status"
     if status is None or status < 100 or status > 599:
         return "unavailable_unknown", "invalid_http_status"
     if 200 <= status <= 299:
