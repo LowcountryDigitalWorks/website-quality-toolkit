@@ -98,7 +98,7 @@ The public workflow keeps a fail-closed checked-in registry for the already-publ
 
 Public capability additions (such as the guarded external-link reachability sidecar) do not imply that private customer runs automatically execute or adopt those capabilities unless a private repin/adoption gate has actually occurred.
 
-The public repository also runs a source-only security baseline on pull requests and pushes to `main`: CodeQL `security-extended` for JavaScript/TypeScript and Python, the accepted LDW reusable Betterleaks secret scan, and the accepted LDW npm/OSV dependency scan against committed lockfiles. Reusable organization workflows are pinned to reviewed commit `a377e52ba698e93d012aa553e4de4af39ba75799`; the dependency scan keeps its privacy-preserving offline mode. These checks do not perform live website scans or change runtime/provider/customer state.
+The public repository also runs a source-only security baseline on pull requests and pushes to `main`: CodeQL `security-extended` for JavaScript/TypeScript and Python, the accepted LDW reusable Betterleaks secret scan, and the accepted LDW npm/OSV dependency scan against committed lockfiles. Reusable organization workflows are pinned to current reviewed `.github` main commit `ea28529418ac13b0d529db499ae0168da2a48e4d`; the dependency scan keeps its privacy-preserving offline mode. These checks do not perform live website scans or change runtime/provider/customer state.
 
 See [`docs/WQT-OPS-001-PRIVATE-RUNTIME.md`](docs/WQT-OPS-001-PRIVATE-RUNTIME.md) for the trust boundary. Do not put customer/private registry data or customer evidence in this public repository.
 

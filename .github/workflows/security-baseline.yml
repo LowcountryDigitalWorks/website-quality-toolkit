@@ -14,7 +14,7 @@ jobs:
     permissions:
       contents: read
       security-events: write
-    uses: LowcountryDigitalWorks/.github/.github/workflows/security-codeql-js.yml@a377e52ba698e93d012aa553e4de4af39ba75799
+    uses: LowcountryDigitalWorks/.github/.github/workflows/security-codeql-js.yml@ea28529418ac13b0d529db499ae0168da2a48e4d
 
   codeql-python:
     runs-on: ubuntu-latest
@@ -40,12 +40,12 @@ jobs:
           category: /language:python
 
   secret-scan:
-    uses: LowcountryDigitalWorks/.github/.github/workflows/security-secrets.yml@a377e52ba698e93d012aa553e4de4af39ba75799
+    uses: LowcountryDigitalWorks/.github/.github/workflows/security-secrets.yml@ea28529418ac13b0d529db499ae0168da2a48e4d
     with:
       verify_canary: false
 
   dependency-scan:
-    uses: LowcountryDigitalWorks/.github/.github/workflows/security-dependencies-npm.yml@a377e52ba698e93d012aa553e4de4af39ba75799
+    uses: LowcountryDigitalWorks/.github/.github/workflows/security-dependencies-npm.yml@ea28529418ac13b0d529db499ae0168da2a48e4d
     with:
       online_queries: false
       verify_canary: false
