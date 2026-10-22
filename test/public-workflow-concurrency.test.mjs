@@ -35,7 +35,9 @@ function groupLineFor(text, prefix) {
 }
 
 function expectedGroupLine(prefix) {
-  return `  group: ${prefix}-${{ github.event_name }}-${{ github.event_name == 'workflow_dispatch' && (inputs.site == 'lowcountrydigitalworks' && 'lowcountrydigitalworks' || inputs.site == 'donovanfamilydentistry' && 'donovanfamilydentistry' || 'invalid-site') || 'validation' }}`;
+  return '  group: '
+    + prefix
+    + "-${{ github.event_name }}-${{ github.event_name == 'workflow_dispatch' && (inputs.site == 'lowcountrydigitalworks' && 'lowcountrydigitalworks' || inputs.site == 'donovanfamilydentistry' && 'donovanfamilydentistry' || 'invalid-site') || 'validation' }}";
 }
 
 test('public target registry has the exact closed site set covered by concurrency mapping', () => {
