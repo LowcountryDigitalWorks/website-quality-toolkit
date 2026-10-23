@@ -98,7 +98,7 @@ The canonical reusable machine layers remain:
 
 The WQT operator summary is a bounded source-neutral index over normalized evidence. Source-native SiteOne/Lighthouse HTML reports are presentation/debug/remediation artifacts, not canonical WQT semantic contracts and not LDW quality policy.
 
-When a private runtime is separately repinned to a WQT ref that produces native HTML reports, the shared scanner core places them under the same site-scoped artifact root in `reports/`. The private runtime may upload those files as noncanonical presentation artifacts without changing target authority or normalized semantics. Private manifests/downstream semantic consumers remain authoritative only for the machine evidence they explicitly bind.
+When a private runtime is separately repinned to a WQT ref that produces native HTML reports, the shared scanner core places them under the same site-scoped artifact root in `reports/`. If the private runtime retains or uploads those files, the adoption gate must make them explicit in the accepted integrity/provenance contract rather than silently leaving newly retained evidence outside coverage. They remain noncanonical presentation artifacts and do not change target authority or normalized semantics; downstream semantic consumers remain authoritative only for the machine evidence they explicitly bind.
 
 ## Current downstream relationship
 
