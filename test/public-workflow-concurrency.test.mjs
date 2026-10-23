@@ -37,7 +37,11 @@ function groupLineFor(text, prefix) {
 function expectedGroupLine(prefix) {
   return '  group: '
     + prefix
-    + "-${{ github.event_name }}-${{ github.event_name == 'workflow_dispatch' && (inputs.site == 'lowcountrydigitalworks' && 'lowcountrydigitalworks' || inputs.site == 'donovanfamilydentistry' && 'donovanfamilydentistry' || 'invalid-site') || 'validation' }}";
+    + "-${{ github.event_name }}-${{ github.event_name == 'workflow_dispatch' && (inputs.site == 'lowcountrydigitalworks' && 'lowcountrydigitalworks' || inputs.site == 'donovanfamilydentistry' && 'donovanfamilydentistry' || 'invalid-site') || github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || 'unsupported-event' }}";
+}
+
+function conceptualPrGroup(prefix, prNumber) {
+  return `${prefix}-pull_request-pr-${prNumber}`;
 }
 
 test('public target registry has the exact closed site set covered by concurrency mapping', () => {
@@ -55,7 +59,7 @@ for (const workflow of workflows) {
     assert.match(groupLine, /'invalid-site'/);
   });
 
-  test(`${workflow.name} concurrency never persists raw arbitrary site input`, () => {
+  test(`${workflow.name} concurrency never persists raw arbitrary site or ref input`, () => {
     const groupLine = groupLineFor(workflow.text, workflow.prefix);
     assert.ok(groupLine, 'expected a workflow-level concurrency group');
     assert.doesNotMatch(
@@ -63,11 +67,19 @@ for (const workflow of workflows) {
       /\$\{\{\s*inputs\.site\s*\}\}/,
       'raw inputs.site must not be interpolated directly into concurrency identity',
     );
+    assert.doesNotMatch(groupLine, /github\.(?:ref|head_ref|base_ref)/);
   });
 
-  test(`${workflow.name} keeps cancellation enabled and PR grouping site-independent`, () => {
+  test(`${workflow.name} scopes PR cancellation to canonical pull-request number`, () => {
     const groupLine = groupLineFor(workflow.text, workflow.prefix);
     assert.match(workflow.text, /^\s{2}cancel-in-progress:\s*true\s*$/m);
-    assert.match(groupLine, /\|\| 'validation' \}\}$/);
+    assert.match(
+      groupLine,
+      /github\.event_name == 'pull_request' && format\('pr-\{0\}', github\.event\.pull_request\.number\)/,
+    );
+    assert.match(groupLine, /\|\| 'unsupported-event' \}\}$/);
+
+    assert.notEqual(conceptualPrGroup(workflow.prefix, 17), conceptualPrGroup(workflow.prefix, 18));
+    assert.equal(conceptualPrGroup(workflow.prefix, 17), conceptualPrGroup(workflow.prefix, 17));
   });
 }
