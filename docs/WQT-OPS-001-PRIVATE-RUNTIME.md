@@ -14,7 +14,7 @@ The public `LowcountryDigitalWorks/website-quality-toolkit` repository remains r
 
 Private runtime ref changes are separately governed. A merge to public WQT does not automatically change the private runtime: `wqt-operations` continues to pin an exact accepted WQT commit/tree until a later bounded repin is reviewed and accepted. Availability of new capabilities in public WQT (such as guarded external-link reachability) does not imply private runtime adoption or customer execution until a private repin and adoption gate occurs.
 
-Scan and semantic evidence execution remains manual/point-in-time unless a service-specific cadence gate is separately authorized and accepted. Enrollment in Web Care or managed-site operation does not automatically activate scheduled or recurring scanning; private recurrence is currently OFF in the shared runtime.
+Scan and semantic evidence execution remains manual/point-in-time by default. Any recurring execution requires a separate service-specific cadence gate. The shared private runtime currently has an accepted **bounded monthly three-site managed-service cadence** under its private operating authority; that accepted cadence does not automatically activate recurrence for any other site, service, enrollment, or public WQT workflow.
 
 ## Authority boundary
 
@@ -98,7 +98,7 @@ The canonical reusable machine layers remain:
 
 The WQT operator summary is a bounded source-neutral index over normalized evidence. Source-native SiteOne/Lighthouse HTML reports are presentation/debug/remediation artifacts, not canonical WQT semantic contracts and not LDW quality policy.
 
-When a private runtime is separately repinned to a WQT ref that produces native HTML reports, the shared scanner core places them under the same site-scoped artifact root in `reports/`. The private runtime may upload those files as noncanonical presentation artifacts without changing target authority or normalized semantics. Private manifests/downstream semantic consumers remain authoritative only for the machine evidence they explicitly bind.
+When a private runtime is separately repinned to a WQT ref that produces native HTML reports, the shared scanner core places them under the same site-scoped artifact root in `reports/`. If the private runtime retains or uploads those files, the adoption gate must make them explicit in the accepted integrity/provenance contract rather than silently leaving newly retained evidence outside coverage. They remain noncanonical presentation artifacts and do not change target authority or normalized semantics; downstream semantic consumers remain authoritative only for the machine evidence they explicitly bind.
 
 ## Current downstream relationship
 
@@ -119,7 +119,7 @@ The accepted private surface owns, subject to its own Product/Portfolio gates:
 - private raw/normalized evidence storage within the approved artifact boundary;
 - integrity/provenance checks;
 - private semantic history/consumer behavior where separately accepted;
-- retention and manual/point-in-time execution policies; private recurrence remains OFF by default and requires explicit service-specific cadence authorization.
+- retention and execution policies, including any separately accepted bounded recurrence; outside an exact accepted cadence, recurrence remains off by default and requires explicit service-specific authorization.
 
 This public document intentionally does **not** contain private registry contents, customer identities, customer evidence, credentials, or private operational records.
 
