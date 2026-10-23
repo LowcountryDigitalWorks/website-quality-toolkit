@@ -14,7 +14,7 @@ The public `LowcountryDigitalWorks/website-quality-toolkit` repository remains r
 
 Private runtime ref changes are separately governed. A merge to public WQT does not automatically change the private runtime: `wqt-operations` continues to pin an exact accepted WQT commit/tree until a later bounded repin is reviewed and accepted. Availability of new capabilities in public WQT (such as guarded external-link reachability) does not imply private runtime adoption or customer execution until a private repin and adoption gate occurs.
 
-Scan and semantic evidence execution remains manual/point-in-time unless a service-specific cadence gate is separately authorized and accepted. Enrollment in Web Care or managed-site operation does not automatically activate scheduled or recurring scanning; private recurrence is currently OFF in the shared runtime.
+Scan and semantic evidence execution remains manual/point-in-time by default. Any recurring execution requires a separate service-specific cadence gate. The shared private runtime currently has an accepted **bounded monthly three-site managed-service cadence** under its private operating authority; that accepted cadence does not automatically activate recurrence for any other site, service, enrollment, or public WQT workflow.
 
 ## Authority boundary
 
@@ -119,7 +119,7 @@ The accepted private surface owns, subject to its own Product/Portfolio gates:
 - private raw/normalized evidence storage within the approved artifact boundary;
 - integrity/provenance checks;
 - private semantic history/consumer behavior where separately accepted;
-- retention and manual/point-in-time execution policies; private recurrence remains OFF by default and requires explicit service-specific cadence authorization.
+- retention and execution policies, including any separately accepted bounded recurrence; outside an exact accepted cadence, recurrence remains off by default and requires explicit service-specific authorization.
 
 This public document intentionally does **not** contain private registry contents, customer identities, customer evidence, credentials, or private operational records.
 
