@@ -54,7 +54,9 @@ test('private runtime documentation reflects accepted current state without expo
   assert.match(privateRuntime, /does not automatically activate recurrence for any other site, service, enrollment, or public WQT workflow/);
   assert.match(privateRuntime, /outside an exact accepted cadence, recurrence remains off by default/);
   assert.doesNotMatch(privateRuntime, /private recurrence is currently OFF/i);
-  assert.match(privateRuntime, /private manifests\/downstream semantic consumers remain authoritative only for the machine evidence they explicitly bind/i);
+  assert.match(privateRuntime, /make them explicit in the accepted integrity\/provenance contract/);
+  assert.match(privateRuntime, /rather than silently leaving newly retained evidence outside coverage/);
+  assert.match(privateRuntime, /downstream semantic consumers remain authoritative only for the machine evidence they explicitly bind/i);
   assert.doesNotMatch(privateRuntime, /eastcoastfoamllc|donovan/i);
 });
 
