@@ -15,7 +15,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: wqt-external-links-${{ github.event_name }}-${{ github.event_name == 'workflow_dispatch' && (inputs.site == 'lowcountrydigitalworks' && 'lowcountrydigitalworks' || inputs.site == 'donovanfamilydentistry' && 'donovanfamilydentistry' || 'invalid-site') || 'validation' }}
+  group: wqt-external-links-${{ github.event_name }}-${{ github.event_name == 'workflow_dispatch' && (inputs.site == 'lowcountrydigitalworks' && 'lowcountrydigitalworks' || inputs.site == 'donovanfamilydentistry' && 'donovanfamilydentistry' || 'invalid-site') || github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || 'unsupported-event' }}
   cancel-in-progress: true
 
 jobs:
@@ -101,7 +101,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: wqt-external-links-${{ inputs.site }}-${{ github.run_id }}
+          name: wqt-external-links-${{ github.run_id }}
           path: artifacts/
           if-no-files-found: warn
           retention-days: 30
