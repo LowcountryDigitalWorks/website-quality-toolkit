@@ -158,16 +158,16 @@ export function resolveTarget(siteIdentifier, registryPath = DEFAULT_REGISTRY_PA
     throw new TargetResolutionError('Site identifier is required; no default or free-form target is permitted.');
   }
   if (!SITE_ID_PATTERN.test(siteIdentifier)) {
-    throw new TargetResolutionError(`Unauthorized site identifier: ${siteIdentifier}`);
+    throw new TargetResolutionError('Unauthorized site identifier.');
   }
 
   const registry = loadRegistry(registryPath);
   const match = registry.sites.find((entry) => entry.id === siteIdentifier);
   if (!match) {
-    throw new TargetResolutionError(`Unauthorized site identifier: ${siteIdentifier}`);
+    throw new TargetResolutionError('Unauthorized site identifier.');
   }
   if (!match.enabled) {
-    throw new TargetResolutionError(`Site identifier is disabled in the target registry: ${siteIdentifier}`);
+    throw new TargetResolutionError('Site identifier is disabled in the target registry.');
   }
 
   return match.origin;
