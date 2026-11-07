@@ -36,7 +36,14 @@ jobs:
             echo "No preinstalled executable Chrome; refusing browser download or sandbox downgrade." >&2
             exit 1
           fi
-          help="$(tools/bin/siteone-crawler --help 2>&1)"
+          # Pinned SiteOne v2.5.1 deliberately exits 2 when displaying --help.
+          # Preserve fail-closed behavior for all other statuses and empty output.
+          help_status=0
+          help="$(tools/bin/siteone-crawler --help 2>&1)" || help_status=$?
+          if [[ "$help_status" -ne 2 || -z "$help" ]]; then
+            echo "Pinned SiteOne help preflight failed (expected help status 2 and nonempty output)." >&2
+            exit 1
+          fi
           for option in --single-page --browser --browser-path --browser-workers --workers --max-reqs-per-sec --timeout --browser-timeout --output-json-file; do
             if ! grep -Fq -- "$option" <<< "$help"; then
               echo "Pinned SiteOne does not advertise required option: $option" >&2
