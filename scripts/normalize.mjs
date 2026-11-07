@@ -315,6 +315,22 @@ function normalizeSiteOne(raw, target) {
   assertObject(raw.crawler, 'SiteOne crawler metadata');
   if (!Array.isArray(raw.summary?.items)) throw new Error('SiteOne report is missing summary.items');
 
+  // A WAF or an unavailable origin can return a scored HTML challenge page.
+  // Such source-native scores describe the challenge, not the authorized site.
+  // Fail closed only when the actual target-root response is explicitly 4xx/5xx;
+  // individual unavailable child assets remain ordinary scanner observations.
+  if (Array.isArray(raw.results)) {
+    const targetRootUrl = new URL('/', target).href;
+    for (const item of raw.results) {
+      if (item?.url !== targetRootUrl) continue;
+      const status = typeof item.status === 'string' || typeof item.status === 'number'
+        ? Number(item.status) : NaN;
+      if (Number.isInteger(status) && status >= 400 && status <= 599) {
+        throw new Error(`SiteOne could not inspect target root: HTTP ${status}; refusing to normalize quality scores from an inaccessible page`);
+      }
+    }
+  }
+
   const categories = Array.isArray(raw.qualityScores?.categories)
     ? raw.qualityScores.categories.map((item) => ({
         code: item.code ?? null,
