@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import test from 'node:test';
+import { fileURLToPath } from 'node:url';
 import {
   AGENT_SIGNALS,
   SCHEMA_VERSION,
@@ -143,8 +144,7 @@ test('CLI rejects oversize input file', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'domscan-cli-'));
   const input = path.join(dir, 'in.json');
   const output = path.join(dir, 'out.json');
-  const script = new URL('../scripts/domscan-sidecar.mjs', import.meta.url).pathname.replace(/^\//, '');
-  const scriptPath = path.resolve(script);
+  const scriptPath = fileURLToPath(new URL('../scripts/domscan-sidecar.mjs', import.meta.url));
   try {
     fs.writeFileSync(input, `${' '.repeat(MAX_INPUT_BYTES)}]`, 'utf8');
     assert.throws(
