@@ -106,3 +106,13 @@ test('method string describes requested flags, not a measured sandbox guarantee'
   assert.equal(result.collectionMethod, 'single_page_chromium_no_sandbox_override_requested');
   assert.equal(result.pageContentVerified, false);
 });
+
+test('manual SiteOne help preflight accepts only documented exit 2, nonempty output and required flags', () => {
+  const workflow = fs.readFileSync(new URL('../.github/workflows/siteone-browser-diagnostic.yml', import.meta.url), 'utf8');
+  assert.match(workflow, /help_status=0/);
+  assert.match(workflow, /help="\$\(tools\/bin\/siteone-crawler --help 2>&1\)" \|\| help_status=\$\?/);
+  assert.match(workflow, /if \[\[ "\$help_status" -ne 2 \|\| -z "\$help" \]\]; then/);
+  assert.doesNotMatch(workflow, /--help 2>&1\)" \|\| true/);
+  assert.match(workflow, /grep -Fq -- "\$option" <<< "\$help"/);
+  assert.match(workflow, /Pinned SiteOne does not advertise required option/);
+});
