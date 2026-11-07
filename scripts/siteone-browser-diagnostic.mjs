@@ -54,7 +54,7 @@ export function summarizeDiagnostic(raw, exitCode, collectedAt) {
     targetRootUrl: ROOT_URL,
     scanner: 'siteone-crawler',
     pinnedVersion: '2.5.1',
-    collectionMethod: 'single_page_chromium_default_sandbox',
+    collectionMethod: 'single_page_chromium_no_sandbox_override_requested',
     diagnosticGeneratedAt: collectedAt,
     scannerExitCode: code,
     rootHttpStatus: derived.rootHttpStatus,
