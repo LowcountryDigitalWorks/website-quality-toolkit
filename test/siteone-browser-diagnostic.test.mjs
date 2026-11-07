@@ -100,3 +100,9 @@ test('manual workflow has no automatic trigger or arbitrary site input, and pres
   assert.match(workflow, /siteone-browser-sanitized\.json/);
   assert.doesNotMatch(workflow, /path:\s*.*siteone\.json/);
 });
+
+test('method string describes requested flags, not a measured sandbox guarantee', () => {
+  const result = summarizeDiagnostic(raw([root('200')]), 0, STAMP);
+  assert.equal(result.collectionMethod, 'single_page_chromium_no_sandbox_override_requested');
+  assert.equal(result.pageContentVerified, false);
+});
