@@ -1,0 +1,26 @@
+{
+  "requested_url": "https://lowcountrydigitalworks.com/",
+  "final_url": "https://lowcountrydigitalworks.com/",
+  "checked_at": "2026-11-07T06:11:00.000Z",
+  "outcome": "partial",
+  "summary": { "score": 83 },
+  "signals": {
+    "webmcp": {
+      "status": "unknown",
+      "validation": "runtime_required",
+      "method": "static_html",
+      "caveats": ["runtime_observation_required"]
+    },
+    "remote_mcp": { "status": "not_detected", "method": "static_html" },
+    "openapi": { "status": "absent", "method": "static_html" },
+    "llms_txt": { "status": "not_detected", "method": "static_html" },
+    "api_catalog": { "status": "not_detected", "method": "static_html" },
+    "mcp_server_card": { "status": "absent", "method": "static_html" },
+    "agent_skills": { "status": "not_detected", "method": "static_html" },
+    "oauth": { "status": "present", "method": "static_html" },
+    "markdown": { "status": "present", "method": "static_html" },
+    "web_bot_auth": { "status": "not_detected", "method": "static_html" },
+    "sitemap_markdown": { "status": "not_detected", "method": "static_html" },
+    "agent_guide": { "status": "not_detected", "method": "static_html" }
+  }
+}

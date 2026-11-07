@@ -1,0 +1,12 @@
+{
+  "domain": "lowcountrydigitalworks.com",
+  "spf": { "classification": { "status": "present" }, "valid": true },
+  "dkim": { "classification": { "status": "present" }, "valid": true },
+  "dmarc": { "classification": { "status": "present" }, "policy": "none" },
+  "dnssec": { "classification": { "status": "absent" } },
+  "caa": { "classification": { "status": "absent" } },
+  "mta_sts": { "classification": { "status": "absent" } },
+  "tls_rpt": { "exists": false },
+  "zone_transfer": { "exposed": null },
+  "checked_at": "2026-11-07T06:10:00.000Z"
+}
