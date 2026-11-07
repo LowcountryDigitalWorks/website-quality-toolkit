@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import { test } from 'node:test';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -115,4 +116,32 @@ test('manual SiteOne help preflight accepts only documented exit 2, nonempty out
   assert.doesNotMatch(workflow, /--help 2>&1\)" \|\| true/);
   assert.match(workflow, /grep -Fq -- "\$option" <<< "\$help"/);
   assert.match(workflow, /Pinned SiteOne does not advertise required option/);
+});
+
+test('SiteOne --help preflight actually runs fail-closed with documented exit 2', { skip: process.platform === 'win32' }, () => {
+  const workflow = fs.readFileSync(new URL('../.github/workflows/siteone-browser-diagnostic.yml', import.meta.url), 'utf8');
+  const start = workflow.indexOf('          help_status=0\n');
+  const end = workflow.indexOf("          printf 'WQT_DIAGNOSTIC_CHROME=", start);
+  assert.ok(start >= 0 && end > start, 'locate exact help preflight in workflow');
+  const preflight = 'set -euo pipefail\n' + workflow.slice(start, end);
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wqt-siteone-help-'));
+  const bin = path.join(dir, 'tools', 'bin');
+  const allFlags = '--single-page --browser --browser-path --browser-workers --workers --max-reqs-per-sec --timeout --browser-timeout --output-json-file';
+  try {
+    fs.mkdirSync(bin, { recursive: true });
+    fs.writeFileSync(path.join(bin, 'siteone-crawler'),
+      '#!/usr/bin/env bash\nprintf "%s" "$MOCK_HELP"\nexit "$MOCK_EXIT"\n',
+      { mode: 0o755 });
+    const run = (code, help) => spawnSync('bash', ['-c', preflight], {
+      cwd: dir, encoding: 'utf8',
+      env: { ...process.env, MOCK_EXIT: String(code), MOCK_HELP: help },
+    });
+    assert.equal(run(2, allFlags).status, 0, 'documented help exit 2 and all flags pass');
+    assert.notEqual(run(0, allFlags).status, 0, 'silent status-0 behavior drift fails closed');
+    assert.notEqual(run(1, allFlags).status, 0, 'unexpected help error fails closed');
+    assert.notEqual(run(2, '').status, 0, 'empty help fails closed');
+    assert.notEqual(run(2, '--browser --single-page').status, 0, 'missing required options fail closed');
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 });
