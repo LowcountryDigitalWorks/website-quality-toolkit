@@ -20,7 +20,7 @@ Each artifact binds:
 | `siteId` | opaque WQT allowlist id (pattern matches WQT resolver) |
 | `origin` | canonical `https://<host>` (no credentials, non-default port, path, query, or hash) |
 | `endpoint` | `dns_security` or `agent_readiness` |
-| `inputObservedAt` | provider `checked_at` (strict UTC ISO-8601 `…Z`); sole observed timestamp in output |
+| `inputObservedAt` | provider `checked_at` (UTC ISO-8601 with `Z`, second- or millisecond-precision); canonicalized to `…sssZ`; sole observed timestamp in output |
 
 `input.domain` must match `origin` host. `agent_readiness` `requested_url` / `final_url` must be exactly `https://<host>/`. Normalization **fails closed** on http, credentials, port drift, path/query/hash spoofing, or malformed timestamps.
 
@@ -31,6 +31,8 @@ Repeated runs with the same local input bytes and trusted `--site-id` / `--origi
 Allowed normalized check `classification` values:
 
 `present`, `absent`, `unknown`, `not_detected`, `not_applicable`, `inconclusive`
+
+Provider `valid: false` on SPF/DKIM does **not** imply `absent` (invalid ≠ non-existent); use explicit `classification` or `exists` evidence. `valid: true` alone does not imply `present`.
 
 Provider rubric scores (for example summary `score: 83`) may appear only as **source-native** contextual fields and are **not** LDW/GAS quality scores.
 

@@ -39,6 +39,7 @@ test('sanitizes dns_security with independent sidecar schema', () => {
     ['spf', 'dkim', 'dmarc', 'dnssec', 'caa', 'mta_sts', 'tls_rpt', 'zone_transfer'],
   );
   assert.equal(out.checks.find((c) => c.code === 'zone_transfer').classification, 'inconclusive');
+  assert.equal(out.checks.find((c) => c.code === 'caa').classification, 'absent');
   assert.equal(out.checks.find((c) => c.code === 'spf').valid, true);
   assert.equal(out.inputObservedAt, '2026-11-07T06:10:00.000Z');
   assert.equal('sourceObservedAt' in out, false);
@@ -122,6 +123,14 @@ test('rejects non-Z and malformed checked_at', () => {
   assert.throws(() => assertIsoUtc('2026-02-30T06:10:00.000Z', 'checked_at'), /legitimate calendar/);
 });
 
+test('assertIsoUtc accepts second-only Z and canonicalizes to milliseconds', () => {
+  assert.equal(assertIsoUtc('2026-11-07T06:21:18Z', 'checked_at'), '2026-11-07T06:21:18.000Z');
+  const dns = structuredClone(dnsFixture);
+  dns.checked_at = '2026-11-07T06:21:18Z';
+  const out = sanitizeDnsSecurity(dns, { siteId: SITE, origin: ORIGIN });
+  assert.equal(out.inputObservedAt, '2026-11-07T06:21:18.000Z');
+});
+
 test('rejects unknown dns check classification', () => {
   const broken = structuredClone(dnsFixture);
   broken.spf = { classification: { status: 'definitely-secure' } };
@@ -190,10 +199,28 @@ test('rejects invalid outcome and leaky caveats', () => {
   assert.throws(() => sanitizeAgentReadiness(leaky, { siteId: SITE, origin: ORIGIN }), /invalid shape/);
 });
 
-test('spf valid true without explicit classification maps to present', () => {
+test('spf and dkim valid false without classification stays unknown not absent', () => {
+  const spfInvalid = structuredClone(dnsFixture);
+  spfInvalid.spf = { valid: false };
+  const spfOut = sanitizeDnsSecurity(spfInvalid, { siteId: SITE, origin: ORIGIN });
+  assert.equal(spfOut.checks.find((c) => c.code === 'spf').classification, 'unknown');
+  assert.equal(spfOut.checks.find((c) => c.code === 'spf').valid, false);
+
+  const dkimInvalid = structuredClone(dnsFixture);
+  dkimInvalid.dkim = { valid: false };
+  const dkimOut = sanitizeDnsSecurity(dkimInvalid, { siteId: SITE, origin: ORIGIN });
+  assert.equal(dkimOut.checks.find((c) => c.code === 'dkim').classification, 'unknown');
+});
+
+test('spf valid true alone without classification stays unknown', () => {
   const minimal = structuredClone(dnsFixture);
   minimal.spf = { valid: true };
   const out = sanitizeDnsSecurity(minimal, { siteId: SITE, origin: ORIGIN });
-  assert.equal(out.checks.find((c) => c.code === 'spf').classification, 'present');
+  assert.equal(out.checks.find((c) => c.code === 'spf').classification, 'unknown');
   assert.equal(out.checks.find((c) => c.code === 'spf').valid, true);
+});
+
+test('tls_rpt exists false maps to absent independently of valid flag', () => {
+  const out = sanitizeDnsSecurity(dnsFixture, { siteId: SITE, origin: ORIGIN });
+  assert.equal(out.checks.find((c) => c.code === 'tls_rpt').classification, 'absent');
 });

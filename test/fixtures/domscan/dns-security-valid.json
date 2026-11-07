@@ -4,7 +4,7 @@
   "dkim": { "classification": { "status": "present" }, "valid": true },
   "dmarc": { "classification": { "status": "present" }, "policy": "none" },
   "dnssec": { "classification": { "status": "absent" } },
-  "caa": { "classification": { "status": "present" } },
+  "caa": { "classification": { "status": "absent" } },
   "mta_sts": { "classification": { "status": "absent" } },
   "tls_rpt": { "exists": false },
   "zone_transfer": { "exposed": null },

@@ -84,11 +84,29 @@ function assertString(value, label, { max = MAX_STRING, pattern = null } = {}) {
 
 export function assertIsoUtc(value, label) {
   const text = assertString(value, label, { max: 64 });
-  if (!ISO_UTC_Z.test(text)) throw new Error(`${label} must be UTC ISO-8601 with millisecond Z suffix`);
+  if (!ISO_UTC_Z.test(text)) throw new Error(`${label} must be UTC ISO-8601 with Z suffix`);
+  const parts = text.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{3}))?Z$/);
+  if (!parts) throw new Error(`${label} must be UTC ISO-8601 with Z suffix`);
   const parsed = Date.parse(text);
   if (Number.isNaN(parsed)) throw new Error(`${label} must be a legitimate calendar time`);
-  if (new Date(parsed).toISOString() !== text) throw new Error(`${label} must be a legitimate calendar time`);
-  return text;
+  const instant = new Date(parsed);
+  const year = Number(parts[1]);
+  const month = Number(parts[2]);
+  const day = Number(parts[3]);
+  const hour = Number(parts[4]);
+  const minute = Number(parts[5]);
+  const second = Number(parts[6]);
+  if (
+    instant.getUTCFullYear() !== year
+    || instant.getUTCMonth() + 1 !== month
+    || instant.getUTCDate() !== day
+    || instant.getUTCHours() !== hour
+    || instant.getUTCMinutes() !== minute
+    || instant.getUTCSeconds() !== second
+  ) {
+    throw new Error(`${label} must be a legitimate calendar time`);
+  }
+  return instant.toISOString();
 }
 
 export function parseHttpsOrigin(value) {
@@ -166,8 +184,6 @@ function classificationFromNested(entry) {
   if (entry.exposed === true) return 'present';
   if (entry.exposed === false) return 'absent';
   if (entry.status !== undefined) return normalizeClassification(entry.status);
-  if (entry.valid === true) return 'present';
-  if (entry.valid === false) return 'absent';
   return 'unknown';
 }
 
