@@ -54,6 +54,12 @@ WQT QA verifies evidence integrity and operator truth. It does **not** create an
     - Do not run a customer/production proof from a pull request or without explicit authorization.
     - Reconcile exact run/artifact identity and return evidence to the owning workstream.
 
+12. **Primary target fetch integrity**
+    - If the structured SiteOne `results[]` explicitly records the exact configured target homepage as HTTP 4xx/5xx, normalization must fail closed rather than treating a Cloudflare/WAF challenge or error page as the website and emitting a healthy-looking source score.
+    - A 200 response for a challenge-platform JavaScript asset or another page is not a replacement for the target homepage. Conversely, an individual blocked child resource does not invalidate a successfully fetched target homepage on its own.
+    - Preserve raw SiteOne and independently collected Lighthouse artifacts for investigation; a blocked SiteOne crawl is not a trustworthy whole-site audit even when its own qualityScores report Excellent.
+    - Any Cloudflare/WAF/anti-bot policy change to admit an authorized scanner requires separate site/security authority. This QA item does not authorize a WAF bypass or recrawl.
+
 ## Release evidence to retain
 
 For the reviewed release/candidate, record at minimum:
