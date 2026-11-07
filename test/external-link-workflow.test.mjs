@@ -73,6 +73,7 @@ test('Python SSRF-classification runtime is exact and pinned', () => {
   const setupMatches = workflow.match(/actions\/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c/g) ?? [];
   assert.equal(setupMatches.length, 2);
   assert.equal((workflow.match(/python-version:\s*'3\.14\.0'/g) ?? []).length, 2);
+  assert.equal((workflow.match(/runs-on:\s*ubuntu-24\.04/g) ?? []).length, 2);
 });
 
 test('manual wrapper resolves registered site authority and exposes no URL input surface', () => {
