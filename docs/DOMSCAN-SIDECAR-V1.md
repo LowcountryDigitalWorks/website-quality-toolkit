@@ -18,12 +18,13 @@ Each artifact binds:
 | `schemaVersion` | always `ldw.wqt-domscan-sidecar.v1` |
 | `provider` | always `domscan` |
 | `siteId` | opaque WQT allowlist id (pattern matches WQT resolver) |
-| `origin` | canonical `https://` origin for the authorized target |
+| `origin` | canonical `https://<host>` (no credentials, non-default port, path, query, or hash) |
 | `endpoint` | `dns_security` or `agent_readiness` |
-| `inputObservedAt` | from provider `checked_at` |
-| `sourceObservedAt` | normalization time (CLI run, UTC ISO) |
+| `inputObservedAt` | provider `checked_at` (strict UTC ISO-8601 `…Z`); sole observed timestamp in output |
 
-`input.domain` / URL host must match `origin` host exactly or normalization **fails closed**.
+`input.domain` must match `origin` host. `agent_readiness` `requested_url` / `final_url` must be exactly `https://<host>/`. Normalization **fails closed** on http, credentials, port drift, path/query/hash spoofing, or malformed timestamps.
+
+Repeated runs with the same local input bytes and trusted `--site-id` / `--origin` / `--endpoint` context produce **byte-identical** JSON (no nondeterministic processing clock).
 
 ## Classifications
 
@@ -33,9 +34,11 @@ Allowed normalized check `classification` values:
 
 Provider rubric scores (for example summary `score: 83`) may appear only as **source-native** contextual fields and are **not** LDW/GAS quality scores.
 
-## Agent readiness caveats
+## Agent readiness signals
 
-Static DomScan agent signals must not imply absent Schema.org/JSON-LD for the whole site when structured-data was not executed here. `webmcp` static `unknown` with `runtime_required` remains **unknown**, not absent.
+The sidecar normalizes the provider’s twelve `agent_readiness.signals` keys only: `webmcp`, `remote_mcp`, `openapi`, `llms_txt`, `api_catalog`, `mcp_server_card`, `agent_skills`, `oauth`, `markdown`, `web_bot_auth`, `sitemap_markdown`, `agent_guide` (sorted in output). Missing keys become explicit **`unknown`**. This slice does **not** ingest `structured_data`, JSON-LD, or Microdata endpoints and must not emit whole-site structured-data claims. `webmcp` with `runtime_required` stays **unknown**, not absent.
+
+Input files are read through a single bounded file descriptor (max 256 KiB); no separate stat-then-read path.
 
 ## CLI
 

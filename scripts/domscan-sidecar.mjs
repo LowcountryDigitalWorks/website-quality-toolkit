@@ -21,7 +21,21 @@ const DNS_CHECKS = [
   'zone_transfer',
 ];
 
-const AGENT_SIGNALS = ['webmcp', 'remote_mcp', 'llms_txt', 'robots_ai', 'sitemap_ai', 'json_ld', 'microdata'];
+/** Provider `agent_readiness.signals` keys (Nov 2026 DomScan contract). */
+export const AGENT_SIGNALS = [
+  'webmcp',
+  'remote_mcp',
+  'openapi',
+  'llms_txt',
+  'api_catalog',
+  'mcp_server_card',
+  'agent_skills',
+  'oauth',
+  'markdown',
+  'web_bot_auth',
+  'sitemap_markdown',
+  'agent_guide',
+];
 
 const CLASSIFICATIONS = new Set([
   'present',
@@ -31,6 +45,14 @@ const CLASSIFICATIONS = new Set([
   'not_applicable',
   'inconclusive',
 ]);
+
+const AGENT_OUTCOMES = new Set(['partial', 'complete', 'success', 'failed', 'error', 'unknown']);
+
+const DMARC_POLICIES = new Set(['none', 'quarantine', 'reject']);
+
+const CAVEAT_TOKEN = /^[a-z][a-z0-9_]{0,63}$/;
+
+const ISO_UTC_Z = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{3})?Z$/;
 
 const EMAIL_LIKE = /@|mailto:/i;
 
@@ -60,13 +82,16 @@ function assertString(value, label, { max = MAX_STRING, pattern = null } = {}) {
   return trimmed;
 }
 
-function assertIsoUtc(value, label) {
+export function assertIsoUtc(value, label) {
   const text = assertString(value, label, { max: 64 });
-  if (Number.isNaN(Date.parse(text))) throw new Error(`${label} must be a valid ISO timestamp`);
+  if (!ISO_UTC_Z.test(text)) throw new Error(`${label} must be UTC ISO-8601 with millisecond Z suffix`);
+  const parsed = Date.parse(text);
+  if (Number.isNaN(parsed)) throw new Error(`${label} must be a legitimate calendar time`);
+  if (new Date(parsed).toISOString() !== text) throw new Error(`${label} must be a legitimate calendar time`);
   return text;
 }
 
-function parseHttpsOrigin(value) {
+export function parseHttpsOrigin(value) {
   const text = assertString(value, 'origin', { max: 512 });
   let url;
   try {
@@ -75,16 +100,46 @@ function parseHttpsOrigin(value) {
     throw new Error('origin must be a valid URL');
   }
   if (url.protocol !== 'https:' || !url.hostname) throw new Error('origin must be https with a hostname');
-  if (url.username || url.password || url.pathname !== '/' || url.search || url.hash) {
+  if (url.username || url.password) throw new Error('origin must not include credentials');
+  if (url.search || url.hash) throw new Error('origin must not include query or hash');
+  if (url.port && url.port !== '443') throw new Error('origin must not specify a non-default port');
+  if (url.pathname !== '/' && url.pathname !== '') {
     throw new Error('origin must be a bare https origin without path, query, or credentials');
   }
-  return { origin: `${url.protocol}//${url.hostname}`, host: url.hostname.toLowerCase() };
+  const host = url.hostname.toLowerCase();
+  return { origin: `https://${host}`, host };
 }
 
-function readBoundedJson(filePath) {
-  const stat = fs.statSync(filePath);
-  if (!stat.isFile() || stat.size > MAX_INPUT_BYTES) throw new Error('input file is missing or exceeds size bound');
-  return JSON.parse(fs.readFileSync(filePath, 'utf8'));
+export function assertRootHttpsUrl(value, label, canonical) {
+  const text = assertString(value, label, { max: 512 });
+  let url;
+  try {
+    url = new URL(text);
+  } catch {
+    throw new Error(`${label} must be a valid URL`);
+  }
+  if (url.protocol !== 'https:') throw new Error(`${label} must use https`);
+  if (url.username || url.password) throw new Error(`${label} must not include credentials`);
+  if (url.search || url.hash) throw new Error(`${label} must not include query or hash`);
+  if (url.port && url.port !== '443') throw new Error(`${label} must not include a non-default port`);
+  if (url.hostname.toLowerCase() !== canonical.host) throw new Error('requested_url/final_url host must match origin host');
+  if (url.pathname !== '/') throw new Error(`${label} must be the canonical site root path`);
+  const allowed = `${canonical.origin}/`;
+  if (text !== allowed) throw new Error(`${label} must exactly match canonical origin root`);
+  return allowed;
+}
+
+export function readBoundedJson(filePath) {
+  const fd = fs.openSync(filePath, 'r');
+  try {
+    const buf = Buffer.alloc(MAX_INPUT_BYTES + 1);
+    const bytesRead = fs.readSync(fd, buf, 0, MAX_INPUT_BYTES + 1, 0);
+    if (bytesRead > MAX_INPUT_BYTES) throw new Error('input file exceeds size bound');
+    const text = buf.toString('utf8', 0, bytesRead);
+    return JSON.parse(text);
+  } finally {
+    fs.closeSync(fd);
+  }
 }
 
 function forbidLeaks(value) {
@@ -111,6 +166,8 @@ function classificationFromNested(entry) {
   if (entry.exposed === true) return 'present';
   if (entry.exposed === false) return 'absent';
   if (entry.status !== undefined) return normalizeClassification(entry.status);
+  if (entry.valid === true) return 'present';
+  if (entry.valid === false) return 'absent';
   return 'unknown';
 }
 
@@ -118,7 +175,10 @@ function boundedCaveats(value) {
   if (value === undefined || value === null) return undefined;
   if (!Array.isArray(value)) throw new Error('caveats must be an array');
   if (value.length > MAX_CAVEATS) throw new Error('caveats exceed bound');
-  return value.map((item, index) => assertString(item, `caveats[${index}]`, { max: 160 }));
+  return value.map((item, index) => {
+    const token = assertString(item, `caveats[${index}]`, { max: 64, pattern: CAVEAT_TOKEN });
+    return token;
+  });
 }
 
 function assertHostMatch(inputHost, originHost) {
@@ -127,11 +187,18 @@ function assertHostMatch(inputHost, originHost) {
   return host;
 }
 
+function assertAgentScore(score) {
+  if (!Number.isInteger(score) || score < 0 || score > 100) {
+    throw new Error('agent readiness score must be an integer from 0 to 100');
+  }
+  return score;
+}
+
 export function sanitizeDnsSecurity(input, { siteId, origin }) {
   if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('dns_security input must be an object');
-  const { host } = parseHttpsOrigin(origin);
+  const canonical = parseHttpsOrigin(origin);
   const opaqueSiteId = assertString(siteId, 'siteId', { pattern: SITE_ID_PATTERN });
-  assertHostMatch(input.domain, host);
+  assertHostMatch(input.domain, canonical.host);
   const observedAt = assertIsoUtc(input.checked_at, 'checked_at');
 
   const checks = [];
@@ -142,7 +209,9 @@ export function sanitizeDnsSecurity(input, { siteId, origin }) {
     if (code === 'spf' && entry?.valid === true) check.valid = true;
     if (code === 'spf' && entry?.valid === false) check.valid = false;
     if (code === 'dmarc' && typeof entry?.policy === 'string') {
-      check.policy = assertString(entry.policy, 'dmarc.policy', { max: 32, pattern: /^[a-z0-9_-]+$/i });
+      const policy = assertString(entry.policy, 'dmarc.policy', { max: 32 }).toLowerCase();
+      if (!DMARC_POLICIES.has(policy)) throw new Error('dmarc.policy has invalid value');
+      check.policy = policy;
     }
     if (code === 'zone_transfer' && entry?.exposed === null) check.classification = 'inconclusive';
     checks.push(check);
@@ -154,10 +223,9 @@ export function sanitizeDnsSecurity(input, { siteId, origin }) {
     evidenceOnly: true,
     gatePolicy: { qualityThresholdsApplied: false, domscanSidecar: true },
     siteId: opaqueSiteId,
-    origin,
+    origin: canonical.origin,
     endpoint: 'dns_security',
     inputObservedAt: observedAt,
-    sourceObservedAt: new Date().toISOString(),
     checks,
   };
   forbidLeaks(artifact);
@@ -166,37 +234,40 @@ export function sanitizeDnsSecurity(input, { siteId, origin }) {
 
 export function sanitizeAgentReadiness(input, { siteId, origin }) {
   if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('agent_readiness input must be an object');
-  const { host } = parseHttpsOrigin(origin);
+  const canonical = parseHttpsOrigin(origin);
   const opaqueSiteId = assertString(siteId, 'siteId', { pattern: SITE_ID_PATTERN });
-  const requested = assertString(input.requested_url, 'requested_url', { max: 512 });
-  const finalUrl = assertString(input.final_url, 'final_url', { max: 512 });
-  const reqHost = new URL(requested).hostname.toLowerCase();
-  const finHost = new URL(finalUrl).hostname.toLowerCase();
-  if (reqHost !== host || finHost !== host) throw new Error('requested_url/final_url host must match origin host');
+  assertRootHttpsUrl(input.requested_url, 'requested_url', canonical);
+  assertRootHttpsUrl(input.final_url, 'final_url', canonical);
   const observedAt = assertIsoUtc(input.checked_at, 'checked_at');
-  if (!input.signals || typeof input.signals !== 'object') throw new Error('signals must be an object');
+  if (!input.signals || typeof input.signals !== 'object' || Array.isArray(input.signals)) {
+    throw new Error('signals must be an object');
+  }
+
+  const outcome = assertString(input.outcome ?? 'unknown', 'outcome', { max: 32 }).toLowerCase();
+  if (!AGENT_OUTCOMES.has(outcome)) throw new Error('outcome has invalid value');
 
   const signals = [];
   for (const code of AGENT_SIGNALS) {
-    if (!(code in input.signals)) continue;
     const raw = input.signals[code];
+    if (raw === undefined || raw === null) {
+      signals.push({ code, classification: 'unknown' });
+      continue;
+    }
+    if (typeof raw !== 'object' || Array.isArray(raw)) throw new Error(`signals.${code} must be an object`);
     const item = {
       code,
       classification: classificationFromNested(raw),
     };
-    if (raw?.validation) item.validation = assertString(raw.validation, `${code}.validation`, { max: 64 });
-    if (raw?.method) item.method = assertString(raw.method, `${code}.method`, { max: 64 });
-    const caveats = boundedCaveats(raw?.caveats);
-    if (caveats) item.caveats = caveats;
-    if (code === 'webmcp' && raw?.validation === 'runtime_required') {
-      item.classification = 'unknown';
+    if (raw.validation !== undefined) {
+      item.validation = assertString(raw.validation, `${code}.validation`, { max: 64, pattern: /^[a-z][a-z0-9_]*$/ });
     }
-    if (
-      code === 'json_ld'
-      && (item.classification === 'absent' || item.classification === 'not_detected')
-    ) {
+    if (raw.method !== undefined) {
+      item.method = assertString(raw.method, `${code}.method`, { max: 64, pattern: /^[a-z][a-z0-9_]*$/ });
+    }
+    const caveats = boundedCaveats(raw.caveats);
+    if (caveats) item.caveats = caveats;
+    if (code === 'webmcp' && raw.validation === 'runtime_required') {
       item.classification = 'unknown';
-      item.note = 'static_signal_not_whole_site_structured_data';
     }
     signals.push(item);
   }
@@ -208,15 +279,16 @@ export function sanitizeAgentReadiness(input, { siteId, origin }) {
     evidenceOnly: true,
     gatePolicy: { qualityThresholdsApplied: false, domscanSidecar: true },
     siteId: opaqueSiteId,
-    origin,
+    origin: canonical.origin,
     endpoint: 'agent_readiness',
+    requestedRootUrl: `${canonical.origin}/`,
+    finalRootUrl: `${canonical.origin}/`,
     inputObservedAt: observedAt,
-    sourceObservedAt: new Date().toISOString(),
-    outcome: assertString(input.outcome ?? 'unknown', 'outcome', { max: 32 }),
+    outcome,
     signals,
   };
-  if (input.summary && typeof input.summary.score === 'number' && Number.isFinite(input.summary.score)) {
-    artifact.sourceNative = { agentReadinessScore: input.summary.score };
+  if (input.summary && typeof input.summary === 'object' && input.summary.score !== undefined) {
+    artifact.sourceNative = { agentReadinessScore: assertAgentScore(input.summary.score) };
   }
   forbidLeaks(artifact);
   return artifact;
