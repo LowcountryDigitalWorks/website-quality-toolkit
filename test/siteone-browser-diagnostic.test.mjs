@@ -86,3 +86,17 @@ test('single bounded read rejects oversized and invalid UTF-8 files without leak
     assert.throws(() => readBoundedJson(invalid), /untrusted/);
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
+
+test('manual workflow has no automatic trigger or arbitrary site input, and preserves browser isolation', () => {
+  const workflow = fs.readFileSync(new URL('../.github/workflows/siteone-browser-diagnostic.yml', import.meta.url), 'utf8');
+  assert.match(workflow, /^on:\s*\n\s+workflow_dispatch:\s*$/m);
+  assert.doesNotMatch(workflow, /^\s+(?:push|pull_request|schedule|inputs):/m);
+  assert.match(workflow, /--url=https:\/\/lowcountrydigitalworks\.com\//);
+  for (const required of ['--single-page', '--browser', '--browser-workers=1', '--workers=1', '--max-reqs-per-sec=1'])
+    assert.equal(workflow.includes(required), true, required);
+  for (const forbidden of ['--browser-no-sandbox', '--browser-auto-download', '--ignore-robots-txt', '--user-agent=', '--proxy='])
+    assert.equal(workflow.includes(forbidden), false, forbidden);
+  assert.match(workflow, /retention-days: 7/);
+  assert.match(workflow, /siteone-browser-sanitized\.json/);
+  assert.doesNotMatch(workflow, /path:\s*.*siteone\.json/);
+});
