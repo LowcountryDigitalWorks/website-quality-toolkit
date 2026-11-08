@@ -127,8 +127,18 @@ test('CLI resolves only registered opaque site ID, preserves unknown for no raw 
   assert.equal(ok.status, 0, ok.stderr);
   assert.match(ok.stdout, /raw_unavailable/);
   const blocked = spawnSync(process.execPath, [script, 'https://example.test', missing], { encoding: 'utf8' });
-  assert.notEqual(blocked.status, 0);
-  assert.doesNotMatch(blocked.stderr, /https:\/\/example.test/);
+  assert.equal(blocked.status, 0, 'operator-only diagnostic must not become a new scan gate');
+  assert.match(blocked.stdout, /Coverage: unknown/);
+  assert.doesNotMatch(blocked.stdout + blocked.stderr, /https:\/\/example.test/);
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wqt-access-invalid-'));
+  try {
+    const invalid = path.join(dir, 'untrusted.json');
+    fs.writeFileSync(invalid, '{bad-json: private@example.test }');
+    const failure = spawnSync(process.execPath, [script, 'lowcountrydigitalworks', invalid], { encoding: 'utf8' });
+    assert.equal(failure.status, 0, 'invalid operator note must not flip existing scan result');
+    assert.match(failure.stdout, /Coverage: unknown/);
+    assert.doesNotMatch(failure.stdout + failure.stderr, /private@example.test/);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 
 test('existing public workflow remains manual target-scoped with read-only permissions, no extra provider requests', () => {
