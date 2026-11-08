@@ -90,8 +90,12 @@ if (invokedDirectly) {
     const raw = readRawIfPresent(process.argv[3]);
     process.stdout.write(renderAccessNotice(process.argv[2], classifySiteOneAccess(raw, origin)));
   } catch {
-    // Never surface raw scanner fields, URLs, headers, error bodies or secrets.
-    process.stderr.write('SiteOne access summary unavailable: source could not be safely interpreted.\n');
-    process.exitCode = 1;
+    // Best-effort presentation must not change the existing scanner/normalizer
+    // job verdict. Unsafe or unsupported diagnostics become UNKNOWN, never PASS.
+    process.stdout.write(
+      '### SiteOne homepage access — diagnostic unavailable\n\n'
+      + '- Coverage: unknown. No scanner quality or homepage content verdict.\n'
+      + '- Existing scanner/normalizer result and raw artifacts remain authoritative.\n',
+    );
   }
 }
