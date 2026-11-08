@@ -38,31 +38,53 @@ test('refuses an excellent SiteOne score when the actual homepage was a 403 chal
 
 test('fails closed on inaccessible root statuses without treating secondary 200 as recovery', () => {
   for (const status of ['401', '404', '429', '500', '503', 403]) {
-    assert.throws(
-      () => normalize([row(root, status), row('https://example.test/asset.js', '200', 2)]),
-      /SiteOne could not inspect target root: HTTP/,
-      String(status),
-    );
+    for (const url of [root, 'https://example.test']) {
+      assert.throws(
+        () => normalize([row(url, status), row('https://example.test/asset.js', '200', 2)]),
+        /SiteOne could not inspect target root: HTTP/,
+        `${url} ${status}`,
+      );
+    }
   }
 });
 
 test('preserves ordinary SiteOne evidence when the root is accessible but an asset fails', () => {
-  const result = normalize([
-    row(root, '200'),
-    row('https://example.test/missing-resource.js', '403', 2),
-  ]);
-  assert.equal(result.sources.siteone.overallScore, 9.7);
-  assert.equal(result.sources.siteone.observations[0].sourceStatus, 'OK');
-  assert.equal(result.schemaMinorVersion, 3);
+  for (const url of [root, 'https://example.test']) {
+    const result = normalize([
+      row(url, '200'),
+      row('https://example.test/missing-resource.js', '403', 2),
+    ]);
+    assert.equal(result.sources.siteone.overallScore, 9.7);
+    assert.equal(result.sources.siteone.observations[0].sourceStatus, 'OK');
+    assert.equal(result.schemaMinorVersion, 3);
+  }
 });
 
 test('does not confuse unrelated or differently scoped URLs with the exact target root', () => {
   const result = normalize([
     row('https://other.example.test/', '403'),
     row('https://example.test/page', '403'),
+    row('http://example.test', '403'),
+    row('http://example.test/', '403'),
+    row('https://example.test/?q=1', '403'),
+    row('https://example.test/#frag', '403'),
+    row('https://user:pass@example.test', '403'),
+    row('https://user:pass@example.test/', '403'),
+    row('https://example.test:8443', '403'),
+    row('https://EXAMPLE.test', '403'),
     row(root, '200'),
   ]);
   assert.equal(result.sources.siteone.overallScore, 9.7);
+});
+
+test('refuses a no-slash origin root 403 that would otherwise publish the excellent score', () => {
+  assert.throws(
+    () => normalize([
+      row('https://example.test', '403'),
+      row('https://example.test/cdn-cgi/challenge-platform/mock-script', '200', 2),
+    ]),
+    /SiteOne could not inspect target root: HTTP 403; refusing to normalize quality scores/,
+  );
 });
 
 test('preserves historical SiteOne fixtures with no results array', () => {
