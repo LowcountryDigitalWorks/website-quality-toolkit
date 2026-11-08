@@ -90,6 +90,10 @@ jobs:
             --lighthouse artifacts/raw/lighthouse.json \
             --output artifacts/normalized/website-quality.json
 
+      - name: Explain SiteOne root-access coverage without changing scan result
+        if: ${{ always() && github.event_name == 'workflow_dispatch' }}
+        run: node scripts/siteone-access-summary.mjs "$WQT_SITE_ID" artifacts/raw/siteone.json >> "$GITHUB_STEP_SUMMARY"
+
       - name: Write operator evidence summary
         run: node scripts/write-summary.mjs artifacts/normalized/website-quality.json >> "$GITHUB_STEP_SUMMARY"
 
