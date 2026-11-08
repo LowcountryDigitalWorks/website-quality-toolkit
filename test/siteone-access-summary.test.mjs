@@ -120,6 +120,36 @@ test('bounded source read handles missing, malformed, oversize and invalid UTF-8
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 
+
+test('descriptor reader rejects symlink substitution and directories without a second path lookup', (t) => {
+  if (!Number.isInteger(fs.constants.O_NOFOLLOW) || process.platform === 'win32') {
+    t.skip('No-follow symlink proof requires a platform that supports O_NOFOLLOW');
+    return;
+  }
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wqt-no-follow-'));
+  try {
+    const original = path.join(dir, 'siteone.json');
+    const moved = path.join(dir, 'accepted-source.json');
+    const link = path.join(dir, 'source-link.json');
+    fs.writeFileSync(original, JSON.stringify(raw([root])));
+    assert.equal(readRawIfPresent(original).results[0].status, '200');
+
+    fs.symlinkSync(original, link);
+    assert.throws(() => readRawIfPresent(link), 'symlink must not be followed to read source bytes');
+
+    // A race-style replacement of a previously safe path by a symlink must
+    // fail closed. A single O_NOFOLLOW open replaces exists/lstat/read-by-path.
+    fs.renameSync(original, moved);
+    fs.symlinkSync(moved, original);
+    assert.throws(() => readRawIfPresent(original), 'replaced file path must not be followed');
+    assert.equal(readRawIfPresent(moved).results[0].status, '200');
+
+    assert.throws(() => readRawIfPresent(dir), 'directory is not a regular source file');
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('CLI resolves only registered opaque site ID, preserves unknown for no raw file and never exposes raw secrets', () => {
   const script = fileURLToPath(new URL('../scripts/siteone-access-summary.mjs', import.meta.url));
   const missing = path.join(os.tmpdir(), 'wqt-access-intentionally-nonexistent-file-000.json');
