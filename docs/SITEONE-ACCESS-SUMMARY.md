@@ -6,6 +6,8 @@ The existing public manual Website Quality Baseline scan attempts exactly the au
 
 The optional new GitHub Step Summary notice reads **only the SiteOne JSON from that same scan** after the normalization attempt, with an `always()` condition. It never performs a new request, retries a challenge, invokes a scanner, changes Cloudflare, runs during a pull request, or turns a failed job into success. Existing raw and Lighthouse evidence are retained by the existing final upload step.
 
+Malformed, oversized, unavailable, or unauthorized diagnostic inputs are rendered as a **fixed unknown/unavailable operator message** without copying untrusted source data. Since this is presentation-only, diagnostic unavailability never introduces a new failing gate or changes the original SiteOne/normalization job result. The original normalizer retains its own fail-closed security boundary.
+
 ## Fixed statuses
 
 - `blocked_root_http_error`: Exact authorized origin/root explicitly returned a 4xx or 5xx. The source does not establish website quality or the cause of the denial.
