@@ -71,15 +71,39 @@ export function renderAccessNotice(siteId, result) {
 }
 
 export function readRawIfPresent(file) {
-  if (!fs.existsSync(file)) return null;
-  const stat = fs.lstatSync(file);
-  if (!stat.isFile() || stat.isSymbolicLink() || stat.size > MAX_RAW_BYTES) fail();
-  const bytes = fs.readFileSync(file);
-  if (bytes.length > MAX_RAW_BYTES) fail();
-  let parsed;
-  try { parsed = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)); }
-  catch { fail(); }
-  return parsed;
+  // Open exactly once with no symlink traversal. Checking a path with lstat()
+  // and subsequently opening by path would introduce a time-of-check/use race.
+  if (!Number.isInteger(fs.constants.O_NOFOLLOW) || !Number.isInteger(fs.constants.O_NONBLOCK)) fail();
+  let descriptor;
+  try {
+    descriptor = fs.openSync(file, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK);
+  } catch (error) {
+    if (error?.code === 'ENOENT') return null;
+    fail();
+  }
+  try {
+    const stat = fs.fstatSync(descriptor);
+    if (!stat.isFile() || !Number.isSafeInteger(stat.size) || stat.size < 0 || stat.size > MAX_RAW_BYTES) fail();
+
+    // Even if a regular file grows after fstat(), read at most MAX_RAW_BYTES+1
+    // using only the already-validated descriptor, never a second path lookup.
+    const chunks = [];
+    let size = 0;
+    while (true) {
+      const remaining = MAX_RAW_BYTES + 1 - size;
+      const next = Buffer.allocUnsafe(Math.min(64 * 1024, remaining));
+      const count = fs.readSync(descriptor, next, 0, next.length, null);
+      if (count === 0) break;
+      size += count;
+      if (size > MAX_RAW_BYTES) fail();
+      chunks.push(next.subarray(0, count));
+    }
+    const bytes = Buffer.concat(chunks, size);
+    try { return JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)); }
+    catch { fail(); }
+  } finally {
+    fs.closeSync(descriptor);
+  }
 }
 
 const invokedDirectly = process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1]);
