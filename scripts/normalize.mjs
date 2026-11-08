@@ -317,12 +317,14 @@ function normalizeSiteOne(raw, target) {
 
   // A WAF or an unavailable origin can return a scored HTML challenge page.
   // Such source-native scores describe the challenge, not the authorized site.
-  // Fail closed only when the actual target-root response is explicitly 4xx/5xx;
-  // individual unavailable child assets remain ordinary scanner observations.
+  // Fail closed only when the actual target-root response is explicitly 4xx/5xx.
+  // The configured origin and its canonical slash root are the only two literal
+  // homepage strings. Individual unavailable child assets remain ordinary observations.
   if (Array.isArray(raw.results)) {
     const targetRootUrl = new URL('/', target).href;
+    const targetOrigin = new URL(targetRootUrl).origin;
     for (const item of raw.results) {
-      if (item?.url !== targetRootUrl) continue;
+      if (item?.url !== targetRootUrl && item?.url !== targetOrigin) continue;
       const status = typeof item.status === 'string' || typeof item.status === 'number'
         ? Number(item.status) : NaN;
       if (Number.isInteger(status) && status >= 400 && status <= 599) {
