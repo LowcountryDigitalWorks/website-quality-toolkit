@@ -80,8 +80,16 @@ esac
     assert.equal(fs.existsSync(path.join(destination, 'siteone-crawler')), false);
     const attempts = fs.readFileSync(curlLog, 'utf8').trim().split('\n');
     assert.equal(attempts.length, 2, 'exactly one primary and one API call');
-    assert.match(attempts[0], /github\.com\/janreges\/siteone-crawler\/releases\/download\/v2\.5\.1/);
-    assert.match(attempts[1], /api\.github\.com\/repos\/janreges\/siteone-crawler\/releases\/assets\/459279687/);
+    // The URL is the final curl argument. Compare its COMPLETE value: a
+    // substring match could accept a URL from a different publisher/host.
+    assert.equal(
+      attempts[0].trim().split(' ').at(-1),
+      'https://github.com/janreges/siteone-crawler/releases/download/v2.5.1/siteone-crawler-v2.5.1-linux-x64.tar.gz',
+    );
+    assert.equal(
+      attempts[1].trim().split(' ').at(-1),
+      'https://api.github.com/repos/janreges/siteone-crawler/releases/assets/459279687',
+    );
     assert.match(attempts[1], /Accept: application\/octet-stream/);
 
     fs.rmSync(curlLog);
