@@ -16,6 +16,61 @@ trap 'rm -rf "$WORK_DIR"' EXIT
 
 archive_path="${WORK_DIR}/${ARCHIVE_NAME}"
 extract_dir="${WORK_DIR}/extract"
+
+# curl < 8.4.0 does not reliably enforce --max-filesize for an unknown-length
+# streamed response. Reject old/unknown versions before any network request or
+# output-directory creation, rather than permitting an unbounded transfer.
+if ! curl_version="$(curl --version 2>/dev/null)"; then
+  echo "SiteOne download requires curl 8.4.0 or newer." >&2
+  exit 1
+fi
+curl_version="${curl_version%% while the first-party asset
+# API remains accessible. Both paths lead to the SAME pinned upstream artifact.
+# The alternate route is used only after a transport failure, never after a
+# checksum/size mismatch. No token, third-party mirror or unpinned fallback.
+if ! curl --proto '=https' --proto-redir '=https' --tlsv1.2 --fail --location \
+  --retry 3 --retry-delay 2 --connect-timeout 15 --max-time 90 --max-filesize 20000000 \
+  --output "$archive_path" "$DOWNLOAD_URL"; then
+  rm -f "$archive_path"
+  echo "SiteOne upstream release transport unavailable; trying pinned official GitHub asset API." >&2
+  curl --proto '=https' --proto-redir '=https' --tlsv1.2 --fail --location \
+    --retry 3 --retry-delay 2 --connect-timeout 15 --max-time 90 --max-filesize 20000000 \
+    --header 'Accept: application/octet-stream' \
+    --output "$archive_path" "$ASSET_API_URL"
+fi
+
+# API metadata JSON, wrong asset, partial download and tampered content all fail
+# closed before extraction. The accepted binary is never installed on failure.
+test "$(stat -c '%s' "$archive_path")" -eq "$EXPECTED_BYTES"
+printf '%s  %s\n' "$EXPECTED_SHA256" "$archive_path" | sha256sum --check --strict
+
+tar -xzf "$archive_path" -C "$extract_dir"
+source_binary="$(find "$extract_dir" -type f -name 'siteone-crawler' -print -quit)"
+if [[ -z "$source_binary" ]]; then
+  echo "Verified archive did not contain a siteone-crawler binary" >&2
+  exit 1
+fi
+
+install -m 0755 "$source_binary" "${DEST_DIR}/siteone-crawler"
+test -x "${DEST_DIR}/siteone-crawler"
+
+# The immutable versioned release URL plus upstream-published digest establishes
+# exact artifact identity. PR validation stops here: no crawler execution and no
+# production-site request occurs until an authorized scan job runs.
+printf 'Verified SiteOne Crawler artifact %s (%s)\n' "$SITEONE_VERSION" "$EXPECTED_SHA256"
+\n'*}"
+if [[ "$curl_version" =~ ^curl[[:space:]]+([0-9]+)\.([0-9]+)\.([0-9]+)([[:space:]]|$) ]]; then
+  curl_major="${BASH_REMATCH[1]}"
+  curl_minor="${BASH_REMATCH[2]}"
+else
+  echo "SiteOne download requires curl 8.4.0 or newer." >&2
+  exit 1
+fi
+if (( 10#$curl_major < 8 || (10#$curl_major == 8 && 10#$curl_minor < 4) )); then
+  echo "SiteOne download requires curl 8.4.0 or newer." >&2
+  exit 1
+fi
+
 mkdir -p "$extract_dir" "$DEST_DIR"
 
 # GitHub's releases/download CDN path can 504 while the first-party asset
