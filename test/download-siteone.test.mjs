@@ -78,7 +78,7 @@ esac
     assert.notEqual(fallback.status, 0, 'digest mismatch must fail closed');
     assert.match(fallback.stdout + fallback.stderr, /FAILED/);
     assert.equal(fs.existsSync(path.join(destination, 'siteone-crawler')), false);
-    const attempts = fs.readFileSync(curlLog, 'utf8').trim().split('\\n');
+    const attempts = fs.readFileSync(curlLog, 'utf8').trim().split('\n');
     assert.equal(attempts.length, 2, 'exactly one primary and one API call');
     assert.match(attempts[0], /github\.com\/janreges\/siteone-crawler\/releases\/download\/v2\.5\.1/);
     assert.match(attempts[1], /api\.github\.com\/repos\/janreges\/siteone-crawler\/releases\/assets\/459279687/);
@@ -88,7 +88,7 @@ esac
     const rejectedPrimary = run(true);
     assert.notEqual(rejectedPrimary.status, 0, 'bad checksum must not silently try a different asset');
     assert.match(rejectedPrimary.stdout + rejectedPrimary.stderr, /FAILED/);
-    const checksumAttempts = fs.readFileSync(curlLog, 'utf8').trim().split('\\n');
+    const checksumAttempts = fs.readFileSync(curlLog, 'utf8').trim().split('\n');
     assert.equal(checksumAttempts.length, 1, 'primary transport success must not trigger fallback');
     assert.equal(fs.existsSync(path.join(destination, 'siteone-crawler')), false);
   } finally {
