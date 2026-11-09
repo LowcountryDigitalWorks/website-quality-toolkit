@@ -17,6 +17,8 @@ test('official SiteOne fallback is pinned to the same exact release and integrit
   assert.match(script, /--header 'Accept: application\/octet-stream'/);
   assert.equal((script.match(/--proto-redir '=https'/g) ?? []).length, 2);
   assert.equal((script.match(/--max-filesize 20000000/g) ?? []).length, 2);
+  assert.match(script, /curl --version/);
+  assert.match(script, /10#\$curl_major < 8/);
   assert.doesNotMatch(script, /(?:secrets\.|GITHUB_TOKEN|Authorization:|curl .*https?:\/\/[^" ]*(?:sourceforge|cloudsmith))/i);
   const sizeGate = script.indexOf('stat -c');
   const hashGate = script.indexOf('sha256sum --check --strict');
@@ -38,6 +40,10 @@ test('synthetic blocked primary uses exact official API, but a wrong-digest asse
   const destination = path.join(dir, 'out');
 
   const stub = `#!/bin/sh
+if [ "$1" = "--version" ]; then
+  printf 'curl %s (synthetic)\\n' "$WQT_CURL_VERSION"
+  exit 0
+fi
 printf '%s\\n' "$*" >> "$WQT_CURL_LOG"
 out=""
 previous=""
@@ -48,13 +54,13 @@ done
 case "$*" in
   *"/releases/download/v2.5.1/"*)
     if [ "$WQT_PRIMARY_OK" = "1" ]; then
-      truncate -s 10876162 "$out"
+      truncate -s "$WQT_FAKE_BYTES" "$out"
       exit 0
     fi
     exit 22
     ;;
   *"/releases/assets/459279687"*)
-    truncate -s 10876162 "$out"
+    truncate -s "$WQT_FAKE_BYTES" "$out"
     exit 0
     ;;
   *) exit 42 ;;
@@ -64,13 +70,15 @@ esac
   try {
     fs.mkdirSync(binDir);
     fs.writeFileSync(fakeCurl, stub, { mode: 0o755 });
-    const run = (primaryOk) => spawnSync('bash', [scriptPath, destination], {
+    const run = (primaryOk, version = '8.16.0', bytes = 10876162) => spawnSync('bash', [scriptPath, destination], {
       encoding: 'utf8',
       env: {
         ...process.env,
         PATH: binDir + path.delimiter + (process.env.PATH ?? ''),
         WQT_CURL_LOG: curlLog,
         WQT_PRIMARY_OK: primaryOk ? '1' : '0',
+        WQT_CURL_VERSION: version,
+        WQT_FAKE_BYTES: String(bytes),
       },
     });
 
@@ -99,6 +107,31 @@ esac
     const checksumAttempts = fs.readFileSync(curlLog, 'utf8').trim().split('\n');
     assert.equal(checksumAttempts.length, 1, 'primary transport success must not trigger fallback');
     assert.equal(fs.existsSync(path.join(destination, 'siteone-crawler')), false);
+
+    // Model an HTTP response without Content-Length that exceeds the cap.
+    // Even a dishonest/mock transport must never turn oversized bytes into an installed binary.
+    fs.rmSync(curlLog);
+    fs.rmSync(destination, { recursive: true, force: true });
+    const oversize = run(false, '8.16.0', 21000000);
+    assert.notEqual(oversize.status, 0, 'oversized stream must be rejected');
+    assert.equal(fs.existsSync(path.join(destination, 'siteone-crawler')), false);
+    const oversizeCalls = fs.readFileSync(curlLog, 'utf8').trim().split('\n');
+    assert.equal(oversizeCalls.length, 2);
+
+    // A curl that cannot guarantee a streamed byte limit must refuse before
+    // any HTTP attempt or creation of the destination folder.
+    fs.rmSync(curlLog);
+    fs.rmSync(destination, { recursive: true, force: true });
+    const outdatedCurl = run(false, '8.3.0', 21000000);
+    assert.notEqual(outdatedCurl.status, 0);
+    assert.match(outdatedCurl.stderr, /requires curl 8\.4\.0 or newer/);
+    assert.equal(fs.existsSync(curlLog), false, 'outdated curl must make no network request');
+    assert.equal(fs.existsSync(destination), false, 'outdated curl must create no output');
+
+    const unparseableCurl = run(false, 'unknown');
+    assert.notEqual(unparseableCurl.status, 0);
+    assert.equal(fs.existsSync(curlLog), false);
+    assert.equal(fs.existsSync(destination), false);
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
