@@ -132,16 +132,18 @@ test('Lighthouse site audit summary is bounded, stable and labels omissions with
 
 test('Lighthouse site audit summary escapes and bounds provider-controlled text', () => {
   const normalized = normalize();
-  const rawTitle = '<script>alert(1)</script> [click](https://example.test) *bold*\nnew line';
+  const rawTitle = '<ScRiPt>alert(1)</ScRiPt> [click](https://example.test) *bold*\nnew line';
   const rawDisplay = 'Q'.repeat(200) + '<img src=x onerror=alert(1)>';
   normalized.sources.lighthouse.observations = [{
     code: 'unsafe-[id]', title: rawTitle, scoreDisplayMode: 'numeric', score: 1, displayValue: rawDisplay,
   }];
   const summary = renderSummary(normalized);
-  assert.match(summary, /&lt;script&gt;/);
+  assert.match(summary, /&lt;ScRiPt&gt;/);
   assert.match(summary, /\\\[click\\\]/);
   assert.match(summary, /\\\*bold\\\*/);
-  assert.doesNotMatch(summary, /<script>|<img|\\nnew line|Q{161}/);
+  assert.equal(summary.toLowerCase().includes('<script'), false);
+  assert.equal(summary.toLowerCase().includes('<img'), false);
+  assert.doesNotMatch(summary, /\\nnew line|Q{161}/);
   assert.match(summary, /Q{160}…/);
   assert.match(summary, /source score \(0–1\): 1/);
   assert.equal(normalized.sources.lighthouse.observations[0].title, rawTitle);
