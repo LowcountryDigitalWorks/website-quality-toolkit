@@ -326,19 +326,58 @@ export function sanitizeDomscanEndpoint(input, context) {
   throw new Error('endpoint must be dns_security or agent_readiness');
 }
 
+function inspectOutputDestination(inputPath, outPath) {
+  const inputStat = fs.statSync(inputPath);
+  let dest;
+  try {
+    // lstat, not stat: do not follow an operator-provided output symlink.
+    dest = fs.lstatSync(outPath);
+  } catch (error) {
+    if (error?.code !== 'ENOENT') throw error;
+  }
+  if (inputPath === outPath
+      || (dest !== undefined
+        && dest.dev === inputStat.dev && dest.ino === inputStat.ino)) {
+    throw new Error('input and output must not refer to the same file');
+  }
+  if (dest !== undefined && !dest.isFile()) {
+    throw new Error('output destination must be a regular file, not a symlink or directory');
+  }
+}
+
+function writeAtomicSidecar(inputPath, outPath, artifact) {
+  inspectOutputDestination(inputPath, outPath);
+  const parentDir = path.dirname(outPath);
+  fs.mkdirSync(parentDir, { recursive: true });
+  // The stage file lives on the same filesystem as the final destination.
+  // Rename replaces an existing regular output atomically rather than
+  // following its final-path symlink, and avoids partially written JSON.
+  const stageDir = fs.mkdtempSync(path.join(parentDir, '.domscan-sidecar-'));
+  try {
+    const stagePath = path.join(stageDir, 'output.json');
+    fs.writeFileSync(stagePath, `${JSON.stringify(artifact, null, 2)}\n`, {
+      encoding: 'utf8', mode: 0o600, flag: 'wx',
+    });
+    // Check again after staging; reject a newly inserted symlink/alias.
+    inspectOutputDestination(inputPath, outPath);
+    fs.renameSync(stagePath, outPath);
+  } finally {
+    fs.rmSync(stageDir, { recursive: true, force: true });
+  }
+}
+
 function main(argv = process.argv.slice(2)) {
   const args = parseArgs(argv);
   const { origin } = parseHttpsOrigin(args.origin);
   const endpoint = assertString(args.endpoint, 'endpoint');
-  const input = readBoundedJson(path.resolve(args.input));
+  const inputPath = path.resolve(args.input);
+  const input = readBoundedJson(inputPath);
   const artifact = sanitizeDomscanEndpoint(input, {
     siteId: args['site-id'],
     origin,
     endpoint,
   });
-  const outPath = path.resolve(args.output);
-  fs.mkdirSync(path.dirname(outPath), { recursive: true });
-  fs.writeFileSync(outPath, `${JSON.stringify(artifact, null, 2)}\n`, 'utf8');
+  writeAtomicSidecar(inputPath, path.resolve(args.output), artifact);
 }
 
 const isMain = process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1]);

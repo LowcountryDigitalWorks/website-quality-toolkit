@@ -261,3 +261,86 @@ test('CLI rejects unknown and repeated flags before any source or output handlin
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
+
+
+test('rejects same-file and hard-link DomScan output alias without destroying source bytes', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'domscan-output-alias-'));
+  const scriptPath = fileURLToPath(new URL('../scripts/domscan-sidecar.mjs', import.meta.url));
+  const input = path.join(dir, 'provider-input.json');
+  const hardlink = path.join(dir, 'provider-hardlink.json');
+  try {
+    const original = JSON.stringify(dnsFixture, null, 2) + '\n';
+    fs.writeFileSync(input, original, 'utf8');
+    fs.linkSync(input, hardlink);
+    for (const output of [input, hardlink]) {
+      assert.throws(
+        () => execFileSync(process.execPath, [
+          scriptPath, '--site-id', SITE, '--origin', ORIGIN, '--endpoint', 'dns_security',
+          '--input', input, '--output', output,
+        ], { encoding: 'utf8' }),
+        /input and output must not refer to the same file/,
+      );
+      assert.equal(fs.readFileSync(input, 'utf8'), original);
+      assert.equal(fs.readFileSync(hardlink, 'utf8'), original);
+      assert.equal(fs.readdirSync(dir).some((name) => name.startsWith('.domscan-sidecar-')), false);
+    }
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('rejects symlink output without modifying its target', (t) => {
+  if (process.platform === 'win32') {
+    t.skip('Symlink setup is platform-permission-dependent; hosted Linux validates this case.');
+    return;
+  }
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'domscan-output-link-'));
+  const scriptPath = fileURLToPath(new URL('../scripts/domscan-sidecar.mjs', import.meta.url));
+  const input = path.join(dir, 'in.json');
+  const target = path.join(dir, 'sentinel.txt');
+  const output = path.join(dir, 'out-link.json');
+  try {
+    fs.writeFileSync(input, JSON.stringify(dnsFixture));
+    fs.writeFileSync(target, 'private sentinel\n');
+    fs.symlinkSync(target, output);
+    assert.throws(
+      () => execFileSync(process.execPath, [
+        scriptPath, '--site-id', SITE, '--origin', ORIGIN, '--endpoint', 'dns_security',
+        '--input', input, '--output', output,
+      ], { encoding: 'utf8' }),
+      /output destination must be a regular file/,
+    );
+    assert.equal(fs.readFileSync(target, 'utf8'), 'private sentinel\n');
+    assert.equal(fs.lstatSync(output).isSymbolicLink(), true);
+    assert.equal(fs.readdirSync(dir).some((name) => name.startsWith('.domscan-sidecar-')), false);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('atomic DomScan output safely replaces regular output and keeps it on bad input', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'domscan-output-atomic-'));
+  const scriptPath = fileURLToPath(new URL('../scripts/domscan-sidecar.mjs', import.meta.url));
+  const input = path.join(dir, 'in.json');
+  const output = path.join(dir, 'out.json');
+  const run = () => execFileSync(process.execPath, [
+    scriptPath, '--site-id', SITE, '--origin', ORIGIN, '--endpoint', 'dns_security',
+    '--input', input, '--output', output,
+  ], { encoding: 'utf8' });
+  try {
+    fs.writeFileSync(input, JSON.stringify(dnsFixture));
+    fs.writeFileSync(output, 'old valid output placeholder\n');
+    assert.doesNotThrow(run);
+    const artifact = JSON.parse(fs.readFileSync(output, 'utf8'));
+    assert.equal(artifact.schemaVersion, SCHEMA_VERSION);
+    assert.equal(artifact.endpoint, 'dns_security');
+    const sanitized = fs.readFileSync(output, 'utf8');
+
+    fs.writeFileSync(input, '{invalid json');
+    assert.throws(run, /SyntaxError|Unexpected token|Expected property name/);
+    assert.equal(fs.readFileSync(output, 'utf8'), sanitized, 'invalid source must preserve prior output');
+    assert.equal(fs.readdirSync(dir).some((name) => name.startsWith('.domscan-sidecar-')), false);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
