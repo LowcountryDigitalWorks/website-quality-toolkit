@@ -88,6 +88,24 @@ WQT is **evidence-first**:
 
 The compact operator summary deliberately shows source status/message/facts while remaining bounded. Richer page-level detail stays in the source-native HTML/raw evidence unless a real accepted downstream need later justifies a normalized contract change.
 
+## Optional local DomScan evidence sidecar — trusted operator only
+
+The separately accepted **DomScan sidecar** is a pure/local, **offline formatter of already-supplied provider evidence**. It does **not** call DomScan, run a third default scanner, change the two pinned SiteOne/Lighthouse sources, or append a new source to the accepted `ldw.website-quality.v1` normalized scan. It emits a separate `ldw.wqt-domscan-sidecar.v1` artifact for a separately authorized downstream consumer.
+
+The accepted CLI is deliberately strict:
+
+```text
+node scripts/domscan-sidecar.mjs --site-id <id> --origin <canonical-https-origin> --endpoint dns_security|agent_readiness --input <local-json-file> --output <local-json-file>
+```
+
+- `dns_security` preserves eight source-native checks (`spf`, `dkim`, `dmarc`, `dnssec`, `caa`, `mta_sts`, `tls_rpt`, `zone_transfer`); `agent_readiness` preserves twelve provider signal fields. Missing, unknown, not-applicable, inconclusive or not-detected observations are **not** proof of a healthy, present or absent service, nor an LDW SEO/AI-visibility score.
+- All five CLI options are required, and unknown or duplicate options fail closed. Existing strict input size, identity/origin, source-method and evidence sanitization limits remain in force. Nothing in this local CLI authorizes fetching a provider response or making a site/customer scan.
+- `--input` and `--output` must not alias by path or existing file identity; a symlink or nonregular **final output** is refused. Successful output is privately staged with mode `0600` in the same parent directory, then atomically renamed after a second destination check. Invalid/failed operations preserve the original source and previously valid output and clean staging residue.
+
+**Trust limitation:** run only with operator-controlled input files and directories. Operator-selected input symlinks are followed; ancestor/parent directory symlinks and hostile concurrent directory replacement are **not fully confined**. This is **not a general-purpose filesystem sandbox** for untrusted local users or adversarial writable directories. Protect inputs, choose a trusted output directory, and do not put customer/private raw evidence into this public repository.
+
+This optional public source artifact is separate from private `wqt-operations` adoption, managed-site runtime pins and JIT execution. Those require their own independently accepted authorization, validation and deployment gates; a public WQT source merge does not imply they occurred.
+
 ## Public and private execution
 
 The public repository owns reusable scanner, resolver, normalization, summary, tests, and workflow behavior.
