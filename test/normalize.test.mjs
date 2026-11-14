@@ -89,6 +89,76 @@ test('summary labels scanner output as evidence, not a gate', () => {
   assert.match(summary, /SEO: 100/);
 });
 
+test('site audit summary preserves individual Lighthouse source modes and explicit score zero', () => {
+  const normalized = normalize();
+  normalized.sources.lighthouse.observations = [
+    { code: 'z-zero', title: 'Binary zero', scoreDisplayMode: 'binary', score: 0, displayValue: 'one item found' },
+    { code: 'a-na', title: 'Not applicable', scoreDisplayMode: 'notApplicable', score: null, displayValue: null },
+    { code: 'm-manual', title: 'Manual check', scoreDisplayMode: 'manual', score: 0, displayValue: null },
+    { code: 'i-info', title: 'Informational', scoreDisplayMode: 'informative', score: null, displayValue: null },
+    { code: 'e-error', title: 'Provider error', scoreDisplayMode: 'error', score: null, displayValue: null },
+    { code: 'n-numeric', title: 'Numeric audit', scoreDisplayMode: 'numeric', score: 0.25, displayValue: '123 ms' },
+  ];
+  const summary = renderSummary(normalized);
+  assert.match(summary, /Individual Lighthouse audit observations \(6 of 6 shown/);
+  assert.ok(summary.indexOf('**a-na**') < summary.indexOf('**z-zero**'));
+  assert.match(summary, /\*\*z-zero\*\*[^\n]*source mode: binary; source score \(0–1\): 0/);
+  assert.match(summary, /\*\*n-numeric\*\*[^\n]*source mode: numeric; source score \(0–1\): 0\.25; source display: 123 ms/);
+  for (const id of ['a-na', 'm-manual', 'i-info', 'e-error']) {
+    assert.match(summary, new RegExp(`\\*\\*${id}\\*\\*[^\\n]*source score \\(0–1\\): n/a`));
+  }
+  assert.match(summary, /unscored[^\n]*not failed\/passed LDW checks/);
+});
+
+test('Lighthouse site audit summary is bounded, stable and labels omissions without ranking', () => {
+  const normalized = normalize();
+  normalized.sources.lighthouse.observations = Array.from({ length: 15 }, (_, index) => ({
+    code: `audit-${String(index).padStart(2, '0')}`,
+    title: 'Original source title',
+    scoreDisplayMode: 'numeric',
+    score: index / 15,
+    displayValue: null,
+  })).reverse();
+  const summary = renderSummary(normalized);
+  assert.equal(renderSummary(normalized), summary);
+  assert.match(summary, /Individual Lighthouse audit observations \(12 of 15 shown/);
+  assert.match(summary, /3 additional Lighthouse source audit\(s\) omitted/);
+  assert.match(summary, /\*\*audit-00\*\*/);
+  assert.match(summary, /\*\*audit-11\*\*/);
+  assert.doesNotMatch(summary, /\*\*audit-12\*\*/);
+  assert.ok(summary.indexOf('**audit-00**') < summary.indexOf('**audit-11**'));
+  assert.equal(normalized.sources.lighthouse.observations[0].code, 'audit-14');
+});
+
+test('Lighthouse site audit summary escapes and bounds provider-controlled text', () => {
+  const normalized = normalize();
+  const rawTitle = '<ScRiPt>alert(1)</ScRiPt> [click](https://example.test) *bold*\nnew line';
+  const rawDisplay = 'Q'.repeat(200) + '<img src=x onerror=alert(1)>';
+  normalized.sources.lighthouse.observations = [{
+    code: 'unsafe-[id]', title: rawTitle, scoreDisplayMode: 'numeric', score: 1, displayValue: rawDisplay,
+  }];
+  const summary = renderSummary(normalized);
+  assert.match(summary, /&lt;ScRiPt&gt;/);
+  assert.match(summary, /\\\[click\\\]/);
+  assert.match(summary, /\\\*bold\\\*/);
+  assert.equal(summary.toLowerCase().includes('<script'), false);
+  assert.equal(summary.toLowerCase().includes('<img'), false);
+  assert.doesNotMatch(summary, /\\nnew line|Q{161}/);
+  assert.match(summary, /Q{160}…/);
+  assert.match(summary, /source score \(0–1\): 1/);
+  assert.equal(normalized.sources.lighthouse.observations[0].title, rawTitle);
+  assert.equal(normalized.sources.lighthouse.observations[0].displayValue, rawDisplay);
+});
+
+test('missing Lighthouse audit observations never become an all-passed claim', () => {
+  const normalized = normalize();
+  normalized.sources.lighthouse.observations = [];
+  const summary = renderSummary(normalized);
+  assert.match(summary, /Individual Lighthouse audit observations \(0 of 0 shown/);
+  assert.match(summary, /absence does not mean every audit passed/);
+  assert.doesNotMatch(summary, /\*\*audit-00\*\*/);
+});
+
 test('rejects malformed scanner evidence', () => {
   assert.throws(
     () => normalizeEvidence({ siteId: 'example-site', target: 'https://example.test', siteone: {}, lighthouse }),
