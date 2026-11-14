@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import {
@@ -223,4 +223,41 @@ test('spf valid true alone without classification stays unknown', () => {
 test('tls_rpt exists false maps to absent independently of valid flag', () => {
   const out = sanitizeDnsSecurity(dnsFixture, { siteId: SITE, origin: ORIGIN });
   assert.equal(out.checks.find((c) => c.code === 'tls_rpt').classification, 'absent');
+});
+
+test('CLI rejects unknown and repeated flags before any source or output handling', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'domscan-cli-args-'));
+  const input = path.join(dir, 'in.json');
+  const output = path.join(dir, 'out.json');
+  const scriptPath = fileURLToPath(new URL('../scripts/domscan-sidecar.mjs', import.meta.url));
+  const acceptedArgs = [
+    '--site-id', SITE, '--origin', ORIGIN, '--endpoint', 'dns_security',
+    '--input', input, '--output', output,
+  ];
+  try {
+    fs.writeFileSync(input, JSON.stringify(dnsFixture), 'utf8');
+    const accepted = spawnSync(process.execPath, [scriptPath, ...acceptedArgs], { encoding: 'utf8' });
+    assert.equal(accepted.status, 0, accepted.stderr);
+    const artifact = JSON.parse(fs.readFileSync(output, 'utf8'));
+    assert.equal(artifact.schemaVersion, SCHEMA_VERSION);
+    assert.equal(artifact.endpoint, 'dns_security');
+
+    const invalidSuffixes = [
+      { options: ['--endpoint', 'agent_readiness'], expected: /Duplicate DomScan CLI option/ },
+      { options: ['--not-supported', 'private@example.test'], expected: /Unrecognized DomScan CLI option/ },
+      { options: ['--__proto__', 'private@example.test'], expected: /Unrecognized DomScan CLI option/ },
+    ];
+    for (const { options, expected } of invalidSuffixes) {
+      fs.rmSync(output, { force: true });
+      const rejected = spawnSync(process.execPath, [scriptPath, ...acceptedArgs, ...options], {
+        encoding: 'utf8',
+      });
+      assert.notEqual(rejected.status, 0, 'ambiguous CLI admission must reject');
+      assert.match(rejected.stderr, expected);
+      assert.equal(fs.existsSync(output), false, 'rejection must not write a sidecar');
+      assert.doesNotMatch(rejected.stderr, /private@example\.test/);
+    }
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 });

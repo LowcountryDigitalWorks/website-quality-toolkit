@@ -60,15 +60,24 @@ function usage() {
   return 'Usage: node scripts/domscan-sidecar.mjs --site-id <id> --origin <https-url> --endpoint dns_security|agent_readiness --input <file> --output <file>';
 }
 
+const REQUIRED_CLI_OPTIONS = ['site-id', 'origin', 'endpoint', 'input', 'output'];
+
 function parseArgs(argv) {
-  const args = {};
+  // A repeated option must not silently change the trusted site/method/output.
+  // Unknown options must not be silently ignored by a guarded evidence adapter.
+  const args = Object.create(null);
   for (let i = 0; i < argv.length; i += 2) {
     const key = argv[i];
     const value = argv[i + 1];
-    if (!key?.startsWith('--') || value === undefined) throw new Error(usage());
-    args[key.slice(2)] = value;
+    if (typeof key !== 'string' || !key.startsWith('--') || typeof value !== 'string') {
+      throw new Error(usage());
+    }
+    const name = key.slice(2);
+    if (!REQUIRED_CLI_OPTIONS.includes(name)) throw new Error('Unrecognized DomScan CLI option');
+    if (Object.hasOwn(args, name)) throw new Error('Duplicate DomScan CLI option');
+    args[name] = value;
   }
-  for (const required of ['site-id', 'origin', 'endpoint', 'input', 'output']) {
+  for (const required of REQUIRED_CLI_OPTIONS) {
     if (!args[required]) throw new Error(`Missing --${required}. ${usage()}`);
   }
   return args;
