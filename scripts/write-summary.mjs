@@ -66,6 +66,46 @@ function formatLighthouseCategoryScores(categoryScores) {
     .join(', ');
 }
 
+const MAX_LIGHTHOUSE_AUDITS = 12;
+
+// Lighthouse text is provider-supplied, not trusted Markdown or HTML.
+function safeAuditText(value, fallback = 'not supplied') {
+  if (typeof value !== 'string') return fallback;
+  const compact = value.replace(/[\u0000-\u001F\u007F]/g, ' ').replace(/\s+/g, ' ').trim();
+  if (!compact) return fallback;
+  const bounded = compact.length > 160 ? `${compact.slice(0, 160)}…` : compact;
+  return bounded.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')
+    .replace(/([\\`*_{}\[\]()#+.!|])/g, '\\$1');
+}
+
+function lighthouseAuditLines(lighthouse) {
+  const observations = Array.isArray(lighthouse.observations) ? [...lighthouse.observations] : [];
+  observations.sort((left, right) => {
+    const a = typeof left?.code === 'string' ? left.code : '';
+    const b = typeof right?.code === 'string' ? right.code : '';
+    return a < b ? -1 : a > b ? 1 : 0;
+  });
+  if (observations.length === 0) {
+    return ['- No individual Lighthouse audit observations were supplied; absence does not mean every audit passed.'];
+  }
+  const shown = observations.slice(0, MAX_LIGHTHOUSE_AUDITS).map((audit) => {
+    const id = safeAuditText(audit?.code, 'unknown-audit-id');
+    const title = safeAuditText(audit?.title, 'untitled audit');
+    const mode = safeAuditText(audit?.scoreDisplayMode);
+    const isScored = audit?.scoreDisplayMode === 'binary' || audit?.scoreDisplayMode === 'numeric';
+    const rawScore = audit?.score;
+    const score = isScored && typeof rawScore === 'number' && Number.isFinite(rawScore)
+      && rawScore >= 0 && rawScore <= 1 ? String(rawScore) : 'n/a';
+    const display = typeof audit?.displayValue === 'string' && audit.displayValue.trim()
+      ? `; source display: ${safeAuditText(audit.displayValue)}` : '';
+    return `- **${id}** — ${title}; source mode: ${mode}; source score (0–1): ${score}${display}`;
+  });
+  if (observations.length > shown.length) {
+    shown.push(`- _${observations.length - shown.length} additional Lighthouse source audit(s) omitted by the ${MAX_LIGHTHOUSE_AUDITS}-item summary bound; see reports/lighthouse.html or raw/lighthouse.json for the full audit inventory._`);
+  }
+  return shown;
+}
+
 function skippedUrlContext(data, siteone) {
   const skippedObservation = (siteone.observations ?? []).find((item) => item.code === 'skipped');
   const supportsSkippedContext = Number.isSafeInteger(data.schemaMinorVersion)
@@ -142,6 +182,8 @@ export function renderSummary(data) {
   const siteoneCategories = formatSiteOneCategoryScores(siteone.categoryScores);
   const lighthouseScores = formatLighthouseCategoryScores(lighthouse.categoryScores);
   const nonOkLines = nonOkSiteOneLines(siteone);
+  const lighthouseLines = lighthouseAuditLines(lighthouse);
+  const lighthouseCount = Array.isArray(lighthouse.observations) ? lighthouse.observations.length : 0;
   const siteoneTime = inlineText(siteone.executedAt, 'not supplied by source');
   const lighthouseTime = inlineText(lighthouse.fetchTime, 'not supplied by source');
 
@@ -181,6 +223,11 @@ export function renderSummary(data) {
     '',
     `- Version: \`${lighthouse.version ?? 'unknown'}\``,
     `- Category scores (**SOURCE-NATIVE** desktop lab evidence, 0-100): ${lighthouseScores}`,
+    '',
+    `### Individual Lighthouse audit observations (${Math.min(lighthouseCount, MAX_LIGHTHOUSE_AUDITS)} of ${lighthouseCount} shown; exact source ID order)`,
+    '',
+    '- Source audit scores use the original Lighthouse 0–1 scale only when source mode is `binary` or `numeric`. Modes such as `manual`, `informative`, `notApplicable`, and `error` are **unscored**, not failed/passed LDW checks. No LDW priority or action is inferred.',
+    ...lighthouseLines,
     '',
     '## Artifact Guide',
     '',

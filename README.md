@@ -40,6 +40,8 @@ The HTML reports are scanner-native operator/remediation/debug surfaces. They ar
 
 The normalized contract remains the authoritative reusable WQT output for downstream systems.
 
+The existing `summary.md` also provides a **bounded source-only Lighthouse audit inventory**: up to 12 exact source audit IDs/titles with original score display modes, 0–1 scores only for scored modes, and safe text excerpts. It reports omitted count instead of hiding truncation. This inventory is not an LDW pass/fail, severity, remediation or priority model; the complete details remain in `reports/lighthouse.html` and `raw/lighthouse.json`. It adds no live scan, source contract, site authority or customer-facing report.
+
 ## WQT, G.A.S., delivery automation, and project tests
 
 The intended architecture is:
