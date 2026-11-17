@@ -1,6 +1,14 @@
 import fs from 'node:fs';
 
 const MAX_NON_OK_SITEONE_OBSERVATIONS = 20;
+const MAX_SITEONE_CATEGORY_ROWS = 16;
+const MAX_SOURCE_STATUS_GROUPS = 24;
+const MAX_SUMMARY_BYTES = 65_536;
+export const MAX_SUMMARY_INPUT_BYTES = 8 * 1024 * 1024;
+
+const MAX_SOURCE_INPUT_OBSERVATIONS = 4_096;
+const MAX_SOURCE_INPUT_CATEGORIES = 512;
+const MAX_SOURCE_INPUT_FACTS = 128;
 const SITEONE_STATUS_ORDER = ['CRITICAL', 'WARNING', 'NOTICE', 'INFO', 'OK', 'UNKNOWN'];
 
 function formatLighthouseScore(score) {
@@ -9,13 +17,25 @@ function formatLighthouseScore(score) {
 
 function formatSourceValue(value) {
   if (typeof value === 'number' && Number.isFinite(value)) return String(value);
-  if (typeof value === 'string' && value.length > 0) return value;
+  if (typeof value === 'string' && value.length > 0) return inlineText(value);
   return 'n/a';
 }
 
 function inlineText(value, fallback = 'n/a') {
   if (value === null || value === undefined || value === '') return fallback;
-  return String(value).replace(/\s+/g, ' ').replaceAll('`', '\\`').trim() || fallback;
+  return safeAuditText(String(value), fallback);
+}
+
+// Dynamic source IDs are displayed as code, not trusted Markdown. A delimiter
+// longer than any source backtick run keeps provider text inside one code span.
+function sourceCodeSpan(value, fallback = 'unknown') {
+  const raw = value === null || value === undefined || value === '' ? fallback : String(value);
+  const compact = raw.replace(/[\u0000-\u001F\u007F]/g, ' ').replace(/\s+/g, ' ').trim() || fallback;
+  const bounded = compact.length > 160 ? compact.slice(0, 160) + '…' : compact;
+  const safe = bounded.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
+  const runs = safe.match(/`+/g) ?? [];
+  const fence = '`'.repeat(Math.max(0, ...runs.map((run) => run.length)) + 1);
+  return fence + (safe.includes('`') ? ' ' + safe + ' ' : safe) + fence;
 }
 
 function sourceStatus(value) {
@@ -47,15 +67,17 @@ function formatFacts(facts) {
 
 function formatSiteOneCategoryScores(categoryScores) {
   if (!Array.isArray(categoryScores) || categoryScores.length === 0) return 'none';
-  return [...categoryScores]
-    .sort((a, b) => String(a?.code ?? a?.name ?? '').localeCompare(String(b?.code ?? b?.name ?? '')))
-    .map((item) => {
-      const name = inlineText(item?.name ?? item?.code, 'unknown');
-      const score = formatSourceValue(item?.score);
-      const label = typeof item?.label === 'string' && item.label.length > 0 ? ` (${inlineText(item.label)})` : '';
-      return `${name}: ${score}${label}`;
-    })
-    .join(', ');
+  const sorted = [...categoryScores]
+    .sort((a, b) => String(a?.code ?? a?.name ?? '').localeCompare(String(b?.code ?? b?.name ?? '')));
+  const shown = sorted.slice(0, MAX_SITEONE_CATEGORY_ROWS).map((item) => {
+    const name = inlineText(item?.name ?? item?.code, 'unknown');
+    const score = formatSourceValue(item?.score);
+    const label = typeof item?.label === 'string' && item.label.length > 0 ? ` (${inlineText(item.label)})` : '';
+    return `${name}: ${score}${label}`;
+  });
+  const omitted = sorted.length - shown.length;
+  if (omitted > 0) shown.push(`${omitted} additional source categor${omitted === 1 ? 'y' : 'ies'} omitted by the ${MAX_SITEONE_CATEGORY_ROWS}-row presentation bound`);
+  return shown.join(', ');
 }
 
 function formatLighthouseCategoryScores(categoryScores) {
@@ -74,6 +96,15 @@ function safeAuditText(value, fallback = 'not supplied') {
   const compact = value.replace(/[\u0000-\u001F\u007F]/g, ' ').replace(/\s+/g, ' ').trim();
   if (!compact) return fallback;
   const bounded = compact.length > 160 ? `${compact.slice(0, 160)}…` : compact;
+  // GitHub Flavored Markdown auto-links naked https://, www. and email-like
+  // provider strings even when Markdown brackets and HTML have been escaped.
+  // Render URL-bearing source values as an inert dynamic code span instead of
+  // trying to escape punctuation that the autolinker can reinterpret.
+  if (/(?:https?:\/\/|www\.|[^\s@]+@[^\s@]+\.[a-z]{2,})/i.test(bounded)) {
+    // Preserve historical escaped bracket/emphasis text expected by the
+    // offline Lighthouse summary contract, while suppressing GFM autolinks.
+    return sourceCodeSpan(bounded.replace(/([\\*\[\]])/g, '\\$1'), fallback);
+  }
   return bounded.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')
     .replace(/([\\`*_{}\[\]()#+.!|])/g, '\\$1');
 }
@@ -150,15 +181,37 @@ function nonOkSiteOneLines(siteone) {
 
   const shown = observations.slice(0, MAX_NON_OK_SITEONE_OBSERVATIONS).map((item) => {
     const status = inlineText(sourceStatus(item?.sourceStatus));
-    const code = inlineText(item?.code, 'unknown-code');
+    const code = sourceCodeSpan(item?.code, 'unknown-code');
     const message = inlineText(item?.message, 'No source message');
     const facts = formatFacts(item?.facts);
-    return `- **${status}** \`${code}\` — ${message}${facts ? ` — facts: ${facts}` : ''}`;
+    return `- **${status}** ${code} — ${message}${facts ? ` — facts: ${facts}` : ''}`;
   });
   if (observations.length > shown.length) {
     shown.push(`- _${observations.length - shown.length} additional non-OK source observation(s) omitted by the ${MAX_NON_OK_SITEONE_OBSERVATIONS}-item presentation bound; inspect normalized/raw evidence for the full set._`);
   }
   return shown;
+}
+
+// Bound provider collection sizes BEFORE sorting or constructing Markdown.
+// The accepted normalizer is still the source-of-truth; this is only an
+// offline operator-rendering resource guard, not a new wire schema.
+function assertBoundedSummaryInput(siteone, lighthouse) {
+  const collections = [
+    [siteone.observations, MAX_SOURCE_INPUT_OBSERVATIONS],
+    [lighthouse.observations, MAX_SOURCE_INPUT_OBSERVATIONS],
+    [siteone.categoryScores, MAX_SOURCE_INPUT_CATEGORIES],
+    [lighthouse.categoryScores, MAX_SOURCE_INPUT_CATEGORIES],
+  ];
+  if (collections.some(([rows, max]) => Array.isArray(rows) && rows.length > max)) {
+    throw new Error('WQT operator summary exceeds bounded source input collections.');
+  }
+  if (Array.isArray(siteone.observations)) {
+    for (const row of siteone.observations) {
+      if (Array.isArray(row?.facts) && row.facts.length > MAX_SOURCE_INPUT_FACTS) {
+        throw new Error('WQT operator summary exceeds bounded source input facts.');
+      }
+    }
+  }
 }
 
 export function renderSummary(data) {
@@ -168,15 +221,19 @@ export function renderSummary(data) {
   const siteone = data.sources?.siteone;
   const lighthouse = data.sources?.lighthouse;
   if (!siteone || !lighthouse) throw new Error('Normalized evidence is missing sources');
+  assertBoundedSummaryInput(siteone, lighthouse);
 
   const statusCounts = new Map();
   for (const item of siteone.observations ?? []) {
     const status = sourceStatus(item?.sourceStatus);
     statusCounts.set(status, (statusCounts.get(status) ?? 0) + 1);
   }
-  const statusText = orderedStatusEntries(statusCounts)
-    .map(([status, count]) => `${status}: ${count}`)
+  const allStatusEntries = orderedStatusEntries(statusCounts);
+  const displayedStatusEntries = allStatusEntries.slice(0, MAX_SOURCE_STATUS_GROUPS);
+  const statusText = displayedStatusEntries
+    .map(([status, count]) => `${inlineText(status)}: ${count}`)
     .join(', ') || 'none';
+  const omittedStatusGroups = allStatusEntries.length - displayedStatusEntries.length;
 
   const skippedContext = skippedUrlContext(data, siteone);
   const siteoneCategories = formatSiteOneCategoryScores(siteone.categoryScores);
@@ -187,11 +244,11 @@ export function renderSummary(data) {
   const siteoneTime = inlineText(siteone.executedAt, 'not supplied by source');
   const lighthouseTime = inlineText(lighthouse.fetchTime, 'not supplied by source');
 
-  return [
+  const summary = [
     '# Website Quality Evidence Summary',
     '',
-    `Site: \`${data.siteId ?? 'unknown'}\``,
-    `Target: \`${data.target}\``,
+    `Site: ${sourceCodeSpan(data.siteId, 'unknown')}`,
+    `Target: ${sourceCodeSpan(data.target)}`,
     '',
     '> Evidence only. SiteOne and Lighthouse statuses/scores are **SOURCE-NATIVE** scanner evidence. SiteOne `--ci` mode is intentionally disabled; WQT applies no LDW quality threshold, combined health score, severity, priority, ranking-impact conclusion, or remediation recommendation.',
     '',
@@ -209,10 +266,10 @@ export function renderSummary(data) {
     '',
     '## SiteOne Crawler',
     '',
-    `- Version: \`${siteone.version ?? 'unknown'}\``,
+    `- Version: ${sourceCodeSpan(siteone.version, 'unknown')}`,
     `- Overall source score (**SOURCE-NATIVE**): ${formatSourceValue(siteone.overallScore)}`,
     `- Category source scores (**SOURCE-NATIVE**): ${siteoneCategories}`,
-    `- Source statuses: ${statusText}`,
+    `- Source statuses: ${statusText}${omittedStatusGroups > 0 ? `; ${omittedStatusGroups} additional source status group(s) omitted by the ${MAX_SOURCE_STATUS_GROUPS}-group presentation bound` : ''}`,
     ...(skippedContext ? [`- Skipped URL context: ${skippedContext}`] : []),
     '',
     `### Non-OK source observations (maximum ${MAX_NON_OK_SITEONE_OBSERVATIONS} shown)`,
@@ -221,7 +278,7 @@ export function renderSummary(data) {
     '',
     '## Lighthouse',
     '',
-    `- Version: \`${lighthouse.version ?? 'unknown'}\``,
+    `- Version: ${sourceCodeSpan(lighthouse.version, 'unknown')}`,
     `- Category scores (**SOURCE-NATIVE** desktop lab evidence, 0-100): ${lighthouseScores}`,
     '',
     `### Individual Lighthouse audit observations (${Math.min(lighthouseCount, MAX_LIGHTHOUSE_AUDITS)} of ${lighthouseCount} shown; exact source ID order)`,
@@ -247,13 +304,56 @@ export function renderSummary(data) {
       '',
     ] : []),
   ].join('\n');
+  if (Buffer.byteLength(summary, 'utf8') > MAX_SUMMARY_BYTES) {
+    throw new Error('WQT operator summary exceeds the bounded Markdown output size.');
+  }
+  return summary;
+}
+
+
+/**
+ * Offline operator CLI admission only. Bound the file by descriptor and content
+ * bytes BEFORE parsing JSON; never use fstat followed by an unbounded readFile.
+ * Existing trusted local symlinks may resolve to regular files, but directories,
+ * devices, FIFOs and all non-regular targets fail closed.
+ */
+export function readBoundedSummaryInput(file) {
+  let fd;
+  try {
+    if (typeof file !== 'string' || !file) throw new Error('invalid path');
+    // O_NONBLOCK prevents a named pipe from hanging on open before fstat can reject it.
+    fd = fs.openSync(file, fs.constants.O_RDONLY | fs.constants.O_NONBLOCK);
+    const stat = fs.fstatSync(fd);
+    if (!stat.isFile() || !Number.isSafeInteger(stat.size)
+        || stat.size < 0 || stat.size > MAX_SUMMARY_INPUT_BYTES) {
+      throw new Error('not a bounded regular input file');
+    }
+    const chunks = [];
+    let total = 0;
+    while (total <= MAX_SUMMARY_INPUT_BYTES) {
+      const next = Buffer.allocUnsafe(Math.min(64 * 1024, MAX_SUMMARY_INPUT_BYTES + 1 - total));
+      const count = fs.readSync(fd, next, 0, next.length, null);
+      if (count === 0) break;
+      total += count;
+      if (total > MAX_SUMMARY_INPUT_BYTES) throw new Error('oversized input');
+      chunks.push(next.subarray(0, count));
+    }
+    // Fatal UTF-8 ensures malformed byte streams are not silently normalized.
+    const decoded = new TextDecoder('utf-8', { fatal: true }).decode(Buffer.concat(chunks, total));
+    return JSON.parse(decoded);
+  } catch {
+    // Never include a visitor/source path or raw provider content in CLI errors.
+    throw new Error('WQT operator summary requires a valid bounded local JSON input file.');
+  } finally {
+    if (fd !== undefined) fs.closeSync(fd);
+  }
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
   try {
     const input = process.argv[2];
     if (!input) throw new Error('Usage: node scripts/write-summary.mjs <normalized-json>');
-    const data = JSON.parse(fs.readFileSync(input, 'utf8'));
+    const data = readBoundedSummaryInput(input);
     process.stdout.write(renderSummary(data));
   } catch (error) {
     console.error(error instanceof Error ? error.message : String(error));
