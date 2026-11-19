@@ -136,6 +136,35 @@ test('offline PSI rejects redirect, origin, source identity and strategy mismatc
   assert.throws(() => output(fixture(), { ...opts, testUnexpectedOption: 1 }), OfflinePsiPreviewError);
 });
 
+test('offline PSI only admits literal canonical HTTPS homepage identities', () => {
+  const canonical = fixture();
+  canonical.id = 'https://example.org';
+  canonical.lighthouseResult.requestedUrl = 'https://example.org';
+  canonical.lighthouseResult.finalUrl = 'https://example.org/';
+  assert.equal(output(canonical).expectedOrigin, 'https://example.org');
+  assert.equal(output(canonical, { ...opts, expectedOrigin: 'https://example.org/' }).expectedOrigin,
+    'https://example.org');
+
+  // URL() normalizes these strings to the same origin. Inputs must not be
+  // silently rewritten into a different source-identity assertion.
+  const aliases = [
+    'https://example.org:443/',
+    'https://EXAMPLE.ORG/',
+    'https://example.org/./',
+    'https://example.org//..',
+  ];
+  for (const alias of aliases) {
+    assert.throws(() => output(fixture(), { ...opts, expectedOrigin: alias }),
+      OfflinePsiPreviewError);
+    for (const field of ['id', 'requestedUrl', 'finalUrl']) {
+      const value = fixture();
+      if (field === 'id') value.id = alias;
+      else value.lighthouseResult[field] = alias;
+      rejects(value);
+    }
+  }
+});
+
 test('offline PSI runtime errors and invalid source scores never become healthy zero', () => {
   const invalid = [
     (v) => { v.lighthouseResult.runtimeError = { code: 'ERRORED_DOCUMENT_REQUEST' }; },

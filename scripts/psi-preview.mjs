@@ -42,6 +42,10 @@ function origin(value) {
   if (labels.length < 2 || labels.some((part) => !LABEL.test(part))
       || labels.some((part) => part.startsWith('xn--'))
       || RESERVED.has(labels.at(-1)) || !/^[a-z]{2,63}$/.test(labels.at(-1))) fail();
+  // URL() silently folds explicit :443, host casing and dot segments.
+  // Admit only the two literal canonical homepage notations; the digest is
+  // not authorization and a normalized alias must not pass source identity.
+  if (value !== url.origin && value !== `${url.origin}/`) fail();
   return url.origin;
 }
 function timestamp(value) {
